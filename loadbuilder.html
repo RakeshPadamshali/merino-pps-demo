@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Press Load Builder · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .ctl { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .ctl select { font:12px 'Roboto'; padding:5px 8px; border:1px solid var(--color-border); border-radius:5px; }
+  .strip { display:flex; gap:3px; overflow-x:auto; padding:4px 0 2px; }
+  .strip .cy { min-width:38px; height:34px; border-radius:4px; border:1px solid rgba(0,0,0,.12); cursor:pointer; font:600 9px 'Roboto'; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.15; color:#fff; }
+  .strip .cy.sel { outline:2px solid #111; outline-offset:1px; } .strip .cy.hist { opacity:.55; } .strip .cy .t { font-weight:400; opacity:.9; }
+  .pgrid .dl { grid-template-columns:170px repeat(8,1fr); }
+  .dlh .hb { height:5px; background:#e6eaed; border-radius:3px; overflow:hidden; margin-top:3px; } .dlh .hb span { display:block; height:100%; background:#2a78d6; }
+  .dlh .tags { display:flex; gap:3px; flex-wrap:wrap; margin-top:2px; }
+  .tag { font:700 8.5px 'Roboto'; letter-spacing:.3px; padding:1px 4px; border-radius:3px; text-transform:uppercase; }
+  .tag.swap { background:#fff3e0; color:#b25f00; } .tag.clean { background:#eceff1; color:#455a64; } .tag.kept { background:#e8f5e9; color:#2e7d32; } .tag.qc { background:#ffebee; color:#c62828; } .tag.ded { background:#fdecec; color:var(--brand-dark); }
+  .pl .sh { font-variant-numeric:tabular-nums; }
+  .why-box { font-size:12px; } .why-box .wl { display:grid; grid-template-columns:130px 1fr 48px; gap:6px; align-items:center; margin:4px 0; } .why-box .wb { height:8px; border-radius:4px; background:#2a78d6; }
+  .elig { display:flex; gap:4px; flex-wrap:wrap; } .elig .e { font-size:10.5px; padding:2px 6px; border-radius:4px; border:1px solid var(--color-border); } .elig .e.ok { background:#e8f5e9; border-color:#c8e6c9; color:#2e7d32; } .elig .e.no { color:#8a93a0; }
+  svg.cut rect.sheet { fill:#fafbfc; stroke:#8a93a0; } svg.cut rect.pc { stroke:#fff; stroke-width:2; } svg.cut text { font:600 10px 'Roboto'; fill:#fff; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Press Load Builder — one press cycle, daylight by daylight</h1><div class="crumb">Scheduling › Press Load Builder › <span id="ctx"></span></div></div>
+    <div class="actions"><a class="btn btn-outline btn-sm" href="schedule.html"><i class="fa-solid fa-chart-gantt"></i> Press Schedule</a><a class="btn btn-outline btn-sm" href="workorders.html"><i class="fa-solid fa-clipboard-list"></i> Shift Work Orders</a></div>
+  </div>
+  <div class="card"><div class="card-body" style="padding:10px 12px">
+    <div class="ctl">
+      <span class="fl" style="font-size:10px;text-transform:uppercase;font-weight:600;color:var(--color-text-muted)">Press</span><select id="press"></select>
+      <button class="btn btn-ghost btn-sm" id="prev"><i class="fa-solid fa-chevron-left"></i> Previous cycle</button>
+      <button class="btn btn-ghost btn-sm" id="next">Next cycle <i class="fa-solid fa-chevron-right"></i></button>
+      <button class="btn btn-ghost btn-sm" id="now"><i class="fa-regular fa-clock"></i> Now</button>
+      <span id="clabel" class="strong"></span><span id="cphase"></span>
+      <span class="hint" style="margin-left:auto" id="cmeta"></span>
+    </div>
+    <div class="strip" id="strip"></div>
+  </div></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid-2-1">
+    <div class="card">
+      <div class="card-head"><i class="fa-solid fa-layer-group"></i> Press load — <span id="gtitle"></span><span class="right legend" id="legend"></span></div>
+      <div class="card-body"><div class="pgrid" id="grid"></div>
+        <div class="note"><i class="fa-solid fa-circle-info"></i><span>Each row is one <b>daylight</b>: one texture from one mould set (8 plates for thin/standard HPL, 4 / 2 / 1 for compact as the books get thicker). Each cell is one plate, coloured by the decor it presses, with its sheet count — a single-sided plate carries 2 laminates, a double-sided 1, and where two books fit the bed (7 ft on the 14 / 16 ft beds, 8 ft on the 16 ft bed) the plate carries two books side by side. Every daylight in the cycle shares one cure profile, so every sheet is in one cure band; the load keeps its distinct thicknesses at or under the target. Click a plate for <b>why it is here</b>.</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="card"><div class="card-head"><i class="fa-solid fa-circle-question"></i> Why this slot <span class="right hint" id="whyhint">click a plate</span></div><div class="card-body why-box" id="why"><div class="empty-state">Pick a plate in the grid to see the line, its score and the rule that put it here.</div></div></div>
+      <div class="card"><div class="card-head"><i class="fa-solid fa-scissors"></i> Cut-size nesting <span class="right hint" id="cuthint"></span></div><div class="card-body" id="cut"></div></div>
+    </div>
+  </div>
+</main></div>
+<script>window.MER_PAGE='loadbuilder'; window.MER_TITLE='Press Load Builder'; window.MER_ICON='fa-layer-group';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script>
+<script>
+  var X = window.MERX, R = null, m = null, press = null, ci = -1, pcs = [], selPlate = null;
+  var h0 = X.hashParam();
+  function phaseOf(c) { return c.phase === 'P' ? 'Planned' : c.end > X.ASOF ? 'Running now' : 'Actual (history)'; }
+  function lineOf(id) { return R.byId[id] || null; }
+  function lineDef(id) { var L = R.state.lines[id]; return L ? L.l : null; }
+  function render(r) {
+    R = r; m = r.m;
+    var ps = document.getElementById('press');
+    if (!ps.options.length) ps.innerHTML = m.presses.map(function (p) { return '<option value="' + p.id + '">' + p.name + ' · ' + p.bed + ' ft · ' + p.dl + ' daylights</option>'; }).join('');
+    if (!press) {   // first view: the 16 ft press (nesting) unless its first planned load is compact — then the next HPL press
+      var hp = h0 && h0.split('-')[0];
+      press = m.pressById[hp] ? hp : ['P6', 'P4', 'P1', 'P2', 'P3', 'P5'].filter(function (id) { var c1 = r.cycles.filter(function (c) { return c.p === id && c.phase === 'P'; })[0]; return c1 && (c1.band === 'B1' || c1.band === 'B2'); })[0] || 'P6';
+    }
+    ps.value = press;
+    pcs = r.cycles.filter(function (c) { return c.p === press; });
+    var want = h0 && h0.indexOf('-') > 0 ? pcs.findIndex(function (c) { return c.id === h0; }) : -1;
+    if (want >= 0) { ci = want; h0 = null; }
+    else if (ci < 0 || !pcs[ci] || pcs[ci].p !== press) ci = nowIndex();   // first view: the cycle running now
+    draw();
+  }
+  function nowIndex() { var i = pcs.findIndex(function (c) { return c.phase === 'P'; }); return i < 0 ? pcs.length - 1 : i; }   // the next planned load
+  function draw() {
+    var c = pcs[ci]; if (!c) return;
+    var p = m.pressById[c.p], BD = m.bandById[c.band], ppd = BD.ppd;
+    document.getElementById('ctx').textContent = p.name + ' · cycle ' + c.id;
+    document.getElementById('clabel').textContent = c.id + ' · ' + X.fmt(c.s0) + ' → ' + X.fmtT(c.end);
+    var ph = phaseOf(c); document.getElementById('cphase').innerHTML = X.badge(ph === 'Planned' ? 'Planned' : ph === 'Running now' ? 'Running' : 'Done', ph);
+    document.getElementById('cmeta').textContent = 'cycle ' + (ci + 1) + ' of ' + pcs.length + ' on ' + p.id + ' · print mark MER ' + c.p + ' … ' + X.yymmdd(c.s0) + '-C' + (c.no < 10 ? '0' : '') + c.no + '-Dnn';
+    document.getElementById('prev').disabled = ci <= 0; document.getElementById('next').disabled = ci >= pcs.length - 1;
+    // strip of neighbouring cycles
+    var a = Math.max(0, ci - 12), b = Math.min(pcs.length, a + 26);
+    document.getElementById('strip').innerHTML = pcs.slice(a, b).map(function (x, k) {
+      var col = X.COLOR.band[x.band] || '#2a78d6';
+      return '<div class="cy' + (a + k === ci ? ' sel' : '') + (x.phase === 'H' && x.end <= X.ASOF ? ' hist' : '') + '" data-i="' + (a + k) + '" style="background:' + col + ';color:' + X.textOn(col) + '" title="' + X.esc(x.id + ' · ' + X.fmt(x.s0) + ' · ' + BDname(x.band) + ' · ' + X.n(x.sheets) + ' sheets') + '">' + X.fmtT(x.s0) + '<span class="t">' + X.fmtDM(x.s0) + '</span></div>';
+    }).join('');
+    // KPIs for the cycle
+    var rowsUsed = c.rows.filter(function (rw) { return rw.s && !rw.clean; }), cleaning = c.rows.filter(function (rw) { return rw.clean; }).length;
+    var minH = 1; rowsUsed.forEach(function (rw) { var set = m.sets[rw.s]; if (set && c.setCounters && c.setCounters[rw.s] != null) minH = Math.min(minH, 1 - c.setCounters[rw.s] / set.limit); });
+    var capS = 0; c.rows.forEach(function (rw) { if (!rw.s || rw.clean) return; });
+    var kp = [
+      ['Cure band', BD.name, BD.id + ' · ' + BD.lo + '–' + BD.hi + ' mm · ' + BD.pressMin + ' min (' + BD.eff + ' at 90%)', 'blue'],
+      ['Sheets this cycle', X.n(c.sheets), X.pct(c.platesUsed / c.plates, 0) + ' of plates used', 'green'],
+      ['Thickness mix', c.thick.length + ' thickness' + (c.thick.length === 1 ? '' : 'es'), (c.thick.join(' / ') || '—') + ' mm · target ≤ ' + m.mixTarget + ', cap ' + m.mixCap, c.thick.length > m.mixTarget ? 'amber' : 'green'],
+      ['Changeover', X.dur(c.chg), c.swaps + ' daylight swap' + (c.swaps === 1 ? '' : 's') + (c.bandChg ? ' + cure-band change' : ''), c.chg ? 'amber' : 'green'],
+      ['Cleaning passes', cleaning, cleaning ? 'daylights resetting a dirty set' : 'none this cycle', cleaning ? 'grey' : 'green'],
+      ['Mould health', rowsUsed.length ? X.pct(minH, 0) : '—', 'lowest remaining life among the sets in this load', minH < 0.5 ? 'amber' : 'blue']
+    ];
+    document.getElementById('kpis').innerHTML = kp.map(function (k) { return '<div class="kpi ' + k[3] + '"><div class="k">' + k[0] + '</div><div class="v" style="font-size:18px">' + X.esc(k[1]) + '</div><div class="s">' + X.esc(k[2]) + '</div></div>'; }).join('');
+    document.getElementById('gtitle').textContent = p.name + ' · ' + p.bed + ' ft bed · ' + p.dl + ' daylights × ' + ppd + ' plate' + (ppd > 1 ? 's' : '') + ' (' + BD.name + ')';
+    document.getElementById('legend').innerHTML = '<span><i style="background:repeating-linear-gradient(45deg,#cfd8dc 0 3px,#eceff1 3px 6px)"></i>cleaning pass</span><span><i style="background:repeating-linear-gradient(45deg,#f4f5f7 0 3px,#fff 3px 6px);border:1px solid #ddd"></i>idle</span><span class="tag swap">swap</span><span class="tag kept">kept</span>';
+    // grid
+    var span = 8 / ppd, html = '';
+    c.rows.forEach(function (rw, r) {
+      var set = rw.s ? m.sets[rw.s] : null, hl = set && c.setCounters && c.setCounters[rw.s] != null ? 1 - c.setCounters[rw.s] / set.limit : null;
+      var qc = (c.qc || []).filter(function (q) { return q.row === r; })[0];
+      var tags = (rw.swap ? '<span class="tag swap">swap</span>' : rw.s ? '<span class="tag kept">kept</span>' : '') + (rw.clean ? '<span class="tag clean">cleaning</span>' : '') + (set && set.dedicatedTo ? '<span class="tag ded" title="dedicated to ' + X.esc(X.custName(set.dedicatedTo)) + ' on ' + set.pressLock + '"><i class="fa-solid fa-lock"></i> ' + X.esc(X.custName(set.dedicatedTo).split(' ')[0]) + '</span>' : '') + (qc ? '<span class="tag qc" title="' + X.esc(qc.defect) + '">QC −' + qc.sheets + '</span>' : '');
+      html += '<div class="dl"><div class="dlh' + (rw.swap ? ' chg' : '') + (rw.clean ? ' clean' : '') + '" title="' + X.esc(rw.why || '') + '"><b>DL ' + (r < 9 ? '0' : '') + (r + 1) + (rw.s ? ' · ' + rw.s : '') + '</b><span class="ms">' + (rw.f ? X.esc(X.finishName(rw.f)) : 'idle') + (hl != null ? ' · ' + X.pct(hl, 0) + ' life' : '') + '</span>' + (hl != null ? '<div class="hb"><span style="width:' + Math.round(hl * 100) + '%;background:' + (hl < 0.3 ? '#d03b3b' : hl < 0.5 ? '#fab219' : '#2a78d6') + '"></span></div>' : '') + '<div class="tags">' + tags + '</div></div>';
+      for (var k = 0; k < ppd; k++) {
+        var x = rw.pl[k], st = 'grid-column:span ' + span;
+        if (rw.clean) { html += '<div class="pl cleaning" style="' + st + '" title="cleaning pass — no output"></div>'; continue; }
+        if (!x) { html += '<div class="pl empty" style="' + st + '" title="' + (rw.s ? 'spare plate' : 'idle daylight') + '"></div>'; continue; }
+        var ln = lineOf(x[0]), def = lineDef(x[0]), sk = m.skus[(ln || def || {}).skuId], dc = X.decor(sk ? sk.decorId : null), col = dc.hex, tc = X.textOn(col);
+        var nest = sk ? m.nest(sk.sizeId, p.bed) : 1, sel = selPlate && selPlate.c === ci && selPlate.r === r && selPlate.k === k;
+        var tip = (sk ? dc.name + ' — ' + X.skuText(m, sk.id) : '') + '\n' + x[0] + (ln && ln.cust ? ' · ' + X.custName(ln.cust) : ' · stock norm') + '\n' + x[1] + ' sheet' + (x[1] > 1 ? 's' : '') + (nest > 1 ? ' · two books side by side' : '');
+        var label = (sk ? sk.decorId : '') + ' · ' + x[1];
+        html += '<div class="pl' + (nest > 1 ? ' nest' : '') + (sel ? ' sel' : '') + '" style="' + st + ';background:' + col + ';color:' + tc + '" data-r="' + r + '" data-k="' + k + '" title="' + X.esc(tip) + '">' +
+          (nest > 1 ? '<div class="sh"><span class="half">' + X.esc(label) + '</span><span class="half">×2</span></div>' : '<div class="sh">' + X.esc(label) + '</div>') + '</div>';
+      }
+      html += '</div>';
+    });
+    document.getElementById('grid').innerHTML = html;
+    if (selPlate && selPlate.c === ci) why(selPlate.r, selPlate.k); else { document.getElementById('why').innerHTML = rowWhyList(c); document.getElementById('whyhint').textContent = 'daylight decisions — click a plate for detail'; }
+    cutPanel(c);
+  }
+  function BDname(b) { var x = m.bandById[b]; return x ? x.name : b; }
+  function rowWhyList(c) {
+    return '<div class="sub-title">How this load was built</div><ol style="margin:0;padding-left:18px;font-size:11.5px;line-height:1.55">' + c.rows.map(function (rw, r) { return rw.s ? '<li><b>DL ' + (r + 1) + '</b> ' + X.esc(rw.s) + ' — ' + X.esc(rw.why || '') + '</li>' : ''; }).join('') + '</ol>';
+  }
+  function why(r, k) {
+    var c = pcs[ci], rw = c.rows[r], x = rw.pl[k]; if (!x) return;
+    var ln = lineOf(x[0]), def = lineDef(x[0]), sk = m.skus[(ln || def).skuId], dc = X.decor(sk.decorId), p = m.pressById[c.p];
+    var parts = X.E.scoreParts(m, def, c.start, c.phase === 'H' ? { mode: 'sequence' } : R.W, null);
+    var h = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">' + X.swatch(sk.decorId) + '<div><div class="strong">' + X.esc(dc.name) + ' <span class="hint">' + sk.decorId + ' · shade ' + dc.shade + '/10</span></div><div class="hint small">' + X.esc(X.skuText(m, sk.id)) + '</div></div></div>';
+    h += '<div class="kv"><div class="k">Line</div><div class="v"><a href="orders.html#' + encodeURIComponent(x[0]) + '">' + X.esc(x[0]) + '</a> ' + X.cls(def.cls, def.rush) + '</div>' +
+      '<div class="k">Customer</div><div class="v">' + X.esc(def.norm ? 'Stock norm replenishment' : X.custName(def.cust)) + '</div>' +
+      (def.norm ? '' : '<div class="k">Due</div><div class="v">' + X.fmtD(def.due) + ' · ' + (ln ? X.badge(ln.status) : '') + '</div>') +
+      '<div class="k">On this plate</div><div class="v">' + x[1] + ' sheet' + (x[1] > 1 ? 's' : '') + ' · daylight ' + (r + 1) + ', plate ' + (k + 1) + '</div>' +
+      '<div class="k">Print mark</div><div class="v mono">' + X.esc(X.printMark(c, r)) + '</div>' +
+      '<div class="k">Daylight rule</div><div class="v">' + X.esc(rw.why || '') + '</div></div>';
+    if (parts.mode === 'weighted') {
+      var mx = Math.max(0.01, parts.parts.profit, parts.parts.dates, parts.parts.delay, parts.parts.norms);
+      h += '<div class="sub-title" style="margin-top:10px">Score at ' + X.fmt(c.start) + ' — ' + parts.total.toFixed(2) + (parts.rush ? ' (rush flag)' : '') + '</div>' +
+        [['Dates (committed + urgency)', parts.parts.dates], ['Delay penalty', parts.parts.delay], ['Profit (margin × nearness)', parts.parts.profit], ['Stock norm', parts.parts.norms]].map(function (q) {
+          return '<div class="wl"><span>' + q[0] + '</span><span><span class="wb" style="display:block;width:' + Math.round(q[1] / mx * 100) + '%"></span></span><span class="mono right-al">' + q[1].toFixed(2) + '</span></div>'; }).join('') +
+        '<div class="hint small">Days to spare after pressing + finishing: ' + parts.slackDays.toFixed(1) + '. Weights: ' + R.W.profit + ' / ' + R.W.dates + ' / ' + R.W.norms + ' / ' + R.W.changeover + ' / ' + R.W.mix + '.</div>';
+    } else h += '<div class="sub-title" style="margin-top:10px">Priority</div><div class="small">' + X.esc(parts.text) + (c.phase === 'H' ? ' — history is planned the way Merino plans today.' : '') + '</div>';
+    // eligibility
+    h += '<div class="sub-title" style="margin-top:10px">Eligible presses (from attributes)</div><div class="elig">' + m.presses.map(function (q) {
+      var ok = sk.presses.indexOf(q.id) >= 0, why2 = ok ? (m.nest(sk.sizeId, q.bed) > 1 ? 'fits · 2 books per plate' : 'fits') : X.E.whyNot(m, sk, q).join('; ');
+      return '<span class="e ' + (ok ? 'ok' : 'no') + '" title="' + X.esc(why2) + '">' + q.id + (ok ? ' ✓' : ' ✗') + '</span>'; }).join('') + '</div>';
+    var set = m.sets[rw.s], hl = c.setCounters && c.setCounters[rw.s] != null ? 1 - c.setCounters[rw.s] / set.limit : null;
+    h += '<div class="sub-title" style="margin-top:10px">Mould set ' + X.esc(rw.s) + '</div><div class="small">' + X.esc(X.finishName(set.finishId)) + ' · ' + set.bed + ' ft · ' + set.plates + ' plates' + (hl != null ? ' · ' + X.pct(hl, 0) + ' life left after this cycle' : '') +
+      ' · this line needs ≥ ' + X.pct(def.minH, 0) + ' (class ' + def.hc + ')' + (set.dedicatedTo ? ' · <b>dedicated</b> to ' + X.esc(X.custName(set.dedicatedTo)) + ' on ' + set.pressLock : '') + '</div>';
+    document.getElementById('why').innerHTML = h; document.getElementById('whyhint').textContent = x[0];
+    if (ln && ln.cutPlan) cutPanel(pcs[ci], ln);
+  }
+  // cut-size nesting: pieces packed into the sheet by the same shelf rule the order quantity was computed with
+  function shelf(L, Wd, pieces) {
+    var placed = [], y = 0, kerf = 4, order = pieces.slice().sort(function (a, b) { return b.h - a.h; });
+    for (var guard = 0; guard < 50; guard++) {
+      var prog = false;
+      for (var i = 0; i < order.length; i++) { var pc = order[i], ph = Math.min(pc.w, pc.h), pw = Math.max(pc.w, pc.h); if (y + ph > Wd) continue;
+        var nn = Math.floor((L + kerf) / (pw + kerf)); if (nn <= 0) continue;
+        for (var j = 0; j < nn; j++) placed.push({ x: j * (pw + kerf), y: y, w: pw, h: ph, name: pc.name }); y += ph + kerf; prog = true; if (y >= Wd) break; }
+      if (!prog || y >= Wd) break;
+    }
+    return placed;
+  }
+  function cutPanel(c, pick) {
+    var el = document.getElementById('cut'), ln = pick;
+    if (!ln) { var ids = {}; c.rows.forEach(function (rw) { rw.pl.forEach(function (x) { ids[x[0]] = 1; }); }); ln = Object.keys(ids).map(lineOf).filter(function (l) { return l && l.cutPlan; })[0]; }
+    if (!ln) {
+      var any = R.lines.filter(function (l) { return l.cutPlan; });
+      el.innerHTML = '<div class="small">No custom cut-piece order in this load. ' + any.length + ' OEM lines carry cut plans — their sheet quantity is what the pieces need after nesting:</div><div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap">' +
+        any.slice(0, 12).map(function (l) { return '<a class="chip" href="#" data-cut="' + X.esc(l.id) + '">' + X.esc(l.id) + '</a>'; }).join('') + '</div>';
+      document.getElementById('cuthint').textContent = 'req 2c';
+      return;
+    }
+    var sk = m.skus[ln.skuId], size = m.sizes[sk.sizeId], cp = ln.cutPlan, placed = shelf(size.len, size.wid, cp.pieces);
+    var sc = 300 / size.len, H = size.wid * sc, used = placed.reduce(function (a, q) { return a + q.w * q.h; }, 0), pal = ['#2a78d6', '#eb6834', '#1baf7a'];
+    var names = cp.pieces.map(function (q) { return q.name; });
+    el.innerHTML = '<div class="small"><b>' + X.esc(ln.id) + '</b> — ' + X.esc(X.custName(ln.cust)) + ' · ' + X.n(cp.piecesOrdered) + ' pieces → <b>' + X.n(ln.qty) + ' sheets</b> at ' + cp.piecesPerSheet + ' pieces / sheet · yield ' + X.pct(used / (size.len * size.wid), 0) + '</div>' +
+      '<svg class="cut" width="100%" viewBox="0 0 304 ' + (H + 4) + '" style="margin-top:6px"><rect class="sheet" x="2" y="2" width="300" height="' + H + '" rx="2"/>' +
+      placed.map(function (q) { var i = names.indexOf(q.name); return '<rect class="pc" x="' + (2 + q.x * sc) + '" y="' + (2 + q.y * sc) + '" width="' + (q.w * sc) + '" height="' + (q.h * sc) + '" fill="' + pal[i % 3] + '"><title>' + X.esc(q.name + ' ' + q.w + ' × ' + q.h + ' mm') + '</title></rect>'; }).join('') + '</svg>' +
+      '<div class="legend" style="margin-top:6px">' + cp.pieces.map(function (q, i) { return '<span><i style="background:' + pal[i % 3] + '"></i>' + X.esc(q.name) + ' ' + q.w + '×' + q.h + ' · ' + q.perSheet + '/sheet</span>'; }).join('') + '</div>';
+    document.getElementById('cuthint').textContent = X.sizeLabel(sk.sizeId) + ' sheet · guillotine shelf nesting';
+  }
+  document.getElementById('press').addEventListener('change', function () { press = this.value; pcs = R.cycles.filter(function (c) { return c.p === press; }); ci = nowIndex(); selPlate = null; draw(); });
+  document.getElementById('prev').addEventListener('click', function () { if (ci > 0) { ci--; selPlate = null; draw(); } });
+  document.getElementById('next').addEventListener('click', function () { if (ci < pcs.length - 1) { ci++; selPlate = null; draw(); } });
+  document.getElementById('now').addEventListener('click', function () { ci = nowIndex(); selPlate = null; draw(); });
+  document.getElementById('strip').addEventListener('click', function (e) { var d = e.target.closest('[data-i]'); if (d) { ci = +d.getAttribute('data-i'); selPlate = null; draw(); } });
+  document.getElementById('grid').addEventListener('click', function (e) { var d = e.target.closest('.pl[data-r]'); if (!d) return; selPlate = { c: ci, r: +d.getAttribute('data-r'), k: +d.getAttribute('data-k') }; document.querySelectorAll('.pl.sel').forEach(function (q) { q.classList.remove('sel'); }); d.classList.add('sel'); why(selPlate.r, selPlate.k); });
+  document.getElementById('cut').addEventListener('click', function (e) { var a = e.target.closest('[data-cut]'); if (!a) return; e.preventDefault(); var ln = R.byId[a.getAttribute('data-cut')]; if (!ln) return;
+    var idx = ln.cycles.length ? ln.cycles[ln.cycles.length - 1] : null; if (idx != null) { var c = R.cycles[idx]; press = c.p; document.getElementById('press').value = press; pcs = R.cycles.filter(function (q) { return q.p === press; }); ci = pcs.indexOf(c); draw(); } cutPanel(pcs[ci], ln); });
+  window.addEventListener('mer:navigate', function (e) { h0 = e.detail; press = null; render(R); });
+  X.withPlan(render); X.whenPlanChanges(render);
+</script>
+</body>
+</html>

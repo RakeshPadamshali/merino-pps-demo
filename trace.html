@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Traceability · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .srch { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .srch input { font:13px ui-monospace,Consolas,monospace; padding:7px 10px; border:1px solid var(--color-border); border-radius:6px; min-width:340px; }
+  .chipbtn { border:1px solid var(--color-border); background:#fff; border-radius:14px; padding:3px 10px; font:11.5px 'Roboto'; cursor:pointer; color:var(--color-text-secondary); }
+  .chipbtn:hover { border-color:var(--color-primary); color:var(--color-primary-dark); }
+  .mark { font-family:ui-monospace,Consolas,monospace; font-size:15px; font-weight:600; letter-spacing:.5px; }
+  .mark span { padding:1px 3px; border-radius:3px; }
+  .mk-p { background:#e3f2fd; } .mk-s { background:#ede7f6; } .mk-d { background:#e8f5e9; } .mk-c { background:#fff3e0; } .mk-l { background:#fce4ec; }
+  .mkey { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--color-text-muted); margin-top:6px; }
+  .mkey i { display:inline-block; width:12px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+  #sc-wrap { max-height:420px; }
+  .swatch { display:inline-block; width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,.15); vertical-align:-3px; margin-right:6px; }
+  .step { display:grid; grid-template-columns:26px 1fr; gap:10px; margin-bottom:10px; } .step .n { background:var(--color-primary-light); color:var(--color-primary-dark); border-radius:6px; text-align:center; font-weight:700; font-size:12px; padding:3px 0; height:24px; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Traceability — a print mark to its press cycle, mould set and paper, and back out to the recall scope</h1><div class="crumb">Execution &amp; Trace › Traceability › <span id="ctx"></span></div></div>
+    <div class="actions"><button class="btn btn-outline btn-sm" id="xl"><i class="fa-solid fa-file-excel"></i> Excel recall scope</button></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-magnifying-glass"></i> Find a sheet <span class="right hint" id="fmt"></span></div>
+    <div class="card-body">
+      <div class="srch"><input id="q" placeholder="MER P4 HG-14-A 260917-C07-D03 — or a cycle, order line, mould set"><button class="btn btn-primary btn-sm" id="go"><i class="fa-solid fa-magnifying-glass"></i> Trace</button><span id="egs"></span></div>
+      <div id="err" class="small" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <div id="out"></div>
+</main></div>
+<script>window.MER_PAGE='trace'; window.MER_TITLE='Traceability'; window.MER_ICON='fa-fingerprint';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script><script src="assets/vendor/xlsx.full.min.js"></script>
+<script>
+  var X = window.MERX, R = null, m = null, cur = null, scope = [], $ = function (id) { return document.getElementById(id); };
+  function lineOf(id) { var ln = R.byId[id]; if (ln) return ln; if (String(id).indexOf('NORM/') === 0) return { id: id, skuId: String(id).slice(5), norm: true, cls: 'NORM', cust: null }; return { id: id, skuId: null }; }
+  function sw(dec) { var x = X.decor(dec); return '<span class="swatch" style="background:' + x.hex + '"></span>'; }
+  // paper lot: the last purchase order of that design received before the cycle (the roll the book builder was drawing from)
+  function paperLot(dec, t) { var best = null; (X.D.pos || []).forEach(function (p) { if (p.decorId !== dec) return; var e = X.minOf(p.eta); if (e <= t && (!best || e > best.e)) best = { po: p, e: e }; }); return best; }
+
+  function findByMark(s) {
+    var mk = String(s).toUpperCase().replace(/\s+/g, ' ').trim().match(/^MER (P\d) ([A-Z0-9-]+) (\d{6})-C(\d+)-D(\d+)$/);
+    if (!mk) return null;
+    var press = mk[1], set = mk[2], ymd = mk[3], no = +mk[4], dl = +mk[5];
+    var hit = null;
+    R.cycles.forEach(function (c) { if (c.p === press && c.no === no && X.yymmdd(c.s0) === ymd) hit = c; });
+    if (!hit) return null;
+    return { c: hit, r: dl - 1, set: set };
+  }
+  function search(s) {
+    s = (s || '').trim(); if (!s) return null;
+    var byMark = findByMark(s); if (byMark) return byMark;
+    var up = s.toUpperCase();
+    var c = R.cycles.filter(function (x) { return x.id.toUpperCase() === up; })[0];
+    if (c) { var r = 0; c.rows.forEach(function (rw, i) { if (rw.s && rw.pl.length && !r) r = i; }); return { c: c, r: r }; }
+    var ln = R.byId[up] || R.byId[s];
+    if (ln && ln.cycles && ln.cycles.length) { var cc = R.cycles[ln.cycles[ln.cycles.length - 1]], rr = 0; cc.rows.forEach(function (rw, i) { if (rw.pl.some(function (q) { return q[0] === ln.id; })) rr = i; }); return { c: cc, r: rr, line: ln.id }; }
+    if (m.sets[up]) { var last = null, lr = 0; R.cycles.forEach(function (x) { x.rows.forEach(function (rw, i) { if (rw.s === up) { last = x; lr = i; } }); }); if (last) return { c: last, r: lr }; }
+    return null;
+  }
+  function complaint() {   // S6: a customer reports a gloss streak on a sheet pressed on P4 five days ago
+    var S = X.D.scenarios.S6, t0 = X.ASOF + S.dayOffset * 1440, best = null;
+    R.cycles.forEach(function (c) {
+      if (c.p !== S.pressId || c.s0 < t0 || c.s0 > t0 + 1440) return;
+      c.rows.forEach(function (rw, i) {
+        if (!rw.s || !rw.pl.length) return;
+        var f = m.finishes[rw.f]; if (!f || f.familyId !== S.family) return;
+        if (!best) best = { c: c, r: i };
+      });
+    });
+    return best;
+  }
+  function render(r) {
+    R = r; m = r.m;
+    $('ctx').textContent = X.n(R.cycles.length) + ' cycles traced · ' + X.D.m.printMark[0].value;
+    $('fmt').innerHTML = 'Print mark format <span class="mono">' + X.esc(X.D.m.printMark[0].value) + '</span>';
+    var cm = complaint(), any = R.cycles[Math.max(0, R.nHist - 40)];
+    var egs = [];
+    if (cm) egs.push(['Scenario S6 — customer complaint', X.printMark(cm.c, cm.r)]);
+    if (any) { var r0 = 0; any.rows.forEach(function (rw, i) { if (rw.s && rw.pl.length && !r0) r0 = i; }); egs.push(['A sheet from ' + X.fmtD(any.s0), X.printMark(any, r0)]); }
+    $('egs').innerHTML = egs.map(function (e) { return '<button class="chipbtn" data-eg="' + X.esc(e[1]) + '">' + X.esc(e[0]) + '</button>'; }).join(' ');
+    var h = X.hashParam();
+    if (!cur) {
+      if (h === 'complaint' && cm) cur = cm;
+      else if (h) cur = search(h);
+      if (!cur && cm) cur = cm;
+    }
+    show();
+  }
+
+  function show() {
+    if (!cur) { $('out').innerHTML = '<div class="card"><div class="card-body empty-state">Nothing traced yet — paste a print mark or pick an example above.</div></div>'; return; }
+    var c = cur.c, r = cur.r, rw = c.rows[r], set = rw.s ? m.sets[rw.s] : null, hist = R.cycles.indexOf(c) < R.nHist;
+    $('q').value = X.printMark(c, r);
+    var mk = X.printMark(c, r).split(' '), ymd = mk[3].split('-');
+    var lines = rw.pl.reduce(function (acc, x) { var e = acc.filter(function (a) { return a[0] === x[0]; })[0]; if (e) e[1] += x[1]; else acc.push([x[0], x[1]]); return acc; }, []);
+    var sku = lines.length ? (lineOf(lines[0][0]).skuId ? m.skus[lineOf(lines[0][0]).skuId] : null) : null;
+    var lot = sku ? paperLot(sku.decorId, c.s0) : null;
+    var S = X.D.m.shifts.filter(function (s) { return s.id === X.shiftOf(c.s0); })[0] || {};
+    // recall scope: every sheet this mould set pressed since its last refurbishment
+    var refs = ((R.state.sets[rw.s] || {}).refurbs || []).map(function (f) { return f.to; }).sort(function (a, b) { return a - b; });
+    var since = 0; refs.forEach(function (t) { if (t <= c.s0) since = t; });
+    var until = null; refs.forEach(function (t) { if (t > c.s0 && until == null) until = t; });
+    scope = [];
+    R.cycles.forEach(function (x) {   // one row per cycle, daylight and order line — the plates of a daylight add up
+      if (x.s0 < since || (until != null && x.s0 >= until)) return;
+      x.rows.forEach(function (w, i) {
+        if (w.s !== rw.s || !w.pl.length) return;
+        var by = {};
+        w.pl.forEach(function (q) { if (by[q[0]]) by[q[0]].n += q[1]; else scope.push(by[q[0]] = { c: x, r: i, line: q[0], n: q[1], plates: 0 }); by[q[0]].plates++; });
+      });
+    });
+    var sheets = scope.reduce(function (a, x) { return a + x.n; }, 0), custs = {}, orders = {};
+    scope.forEach(function (x) { var l = lineOf(x.line); if (l.norm) custs['(stock)'] = 1; else { custs[l.cust] = 1; orders[l.orderId] = 1; } });
+    var qc = (c.qc || []).filter(function (q) { return q.row === r; });
+    $('out').innerHTML =
+      '<div class="card"><div class="card-head"><i class="fa-solid fa-barcode"></i> The sheet <span class="right">' + (hist ? '<span class="badge b-grey">pressed</span>' : '<span class="badge b-green">planned</span>') + '</span></div><div class="card-body">' +
+      '<div class="mark"><span class="mk-p">' + X.esc(mk[0] + ' ' + mk[1]) + '</span> <span class="mk-s">' + X.esc(mk[2]) + '</span> <span class="mk-d">' + X.esc(ymd[0]) + '</span>-<span class="mk-c">' + X.esc(ymd[1]) + '</span>-<span class="mk-l">' + X.esc(ymd[2]) + '</span></div>' +
+      '<div class="mkey"><span><i style="background:#e3f2fd"></i>press</span><span><i style="background:#ede7f6"></i>mould set</span><span><i style="background:#e8f5e9"></i>date</span><span><i style="background:#fff3e0"></i>cycle of that day</span><span><i style="background:#fce4ec"></i>daylight</span></div>' +
+      '<div class="grid2" style="margin-top:12px"><div class="kv">' +
+        '<div class="k">Press cycle</div><div class="v"><a class="mono" href="loadbuilder.html#' + c.id + '">' + c.id + '</a> · ' + X.esc(m.pressById[c.p].name) + ' · cycle ' + c.no + ' of ' + X.fmtD(c.s0) + '</div>' +
+        '<div class="k">Pressed</div><div class="v">' + X.fmt(c.s0) + ' – ' + X.fmt(c.end) + ' · ' + X.esc(m.bandById[c.band].name) + ' (' + c.band + ', ' + m.bandById[c.band].pressMin + ' min)' + (c.over ? ' <span class="badge b-amber">ran ' + c.over + ' min over</span>' : '') + '</div>' +
+        '<div class="k">Shift</div><div class="v">Shift ' + X.shiftOf(c.s0) + ' · in-charge ' + X.esc(S.incharge || '') + ' · relief ' + X.esc(S.relief || '') + '</div>' +
+        '<div class="k">Daylight</div><div class="v">' + (r + 1) + ' of ' + m.pressById[c.p].dl + ' · ' + rw.pl.length + ' plates' + (rw.clean ? ' · <span class="badge b-amber">cleaning pass</span>' : '') + '</div>' +
+        '<div class="k">Mould set</div><div class="v"><a class="mono" href="moulds.html#' + X.esc(rw.s) + '">' + X.esc(rw.s) + '</a> · ' + X.esc(X.finishName(rw.f)) + (set ? ' · ' + set.bed + ' ft · ' + set.plates + ' plates' : '') + (c.setCounters && c.setCounters[rw.s] != null ? ' · counter ' + c.setCounters[rw.s] + ' / ' + set.limit + ' (health ' + X.pct(1 - c.setCounters[rw.s] / set.limit, 0) + ')' : '') + '</div>' +
+        '<div class="k">Set last refurbished</div><div class="v">' + (since ? X.fmt(since) : '<span class="hint">not since the start of the record</span>') + (until != null ? ' · next refurbishment ' + X.fmt(until) : '') + '</div>' +
+      '</div><div class="kv">' +
+        '<div class="k">Product</div><div class="v">' + (sku ? sw(sku.decorId) + X.esc(X.skuText(m, sku.id)) + ' <span class="hint mono">' + X.esc(sku.id) + '</span>' : '<span class="hint">—</span>') + '</div>' +
+        '<div class="k">On this daylight</div><div class="v">' + (lines.length ? lines.map(function (x) { var l = lineOf(x[0]); return X.n(x[1]) + ' sheets · ' + (l.norm ? 'stock norm' : '<a class="mono" href="orders.html#' + X.esc(l.id) + '">' + X.esc(l.id) + '</a> · ' + X.esc(X.custName(l.cust)) + (l.orderId ? ' <span class="hint">(' + X.esc(l.orderId) + ')</span>' : '')); }).join('<br>') : '<span class="hint">no output</span>') + '</div>' +
+        '<div class="k">Decor paper lot</div><div class="v">' + (lot ? '<a class="mono" href="materials.html#' + X.esc(sku.decorId) + '">' + X.esc(lot.po.id) + '</a> · ' + X.n(lot.po.sheets) + ' sheets received ' + X.fmtD(lot.e) + ' · ' + X.esc((X.by.suppliers[lot.po.supplierId] || {}).name || '') : '<span class="hint">from opening stock</span>') + '</div>' +
+        '<div class="k">Kraft / overlay</div><div class="v">' + (sku ? ((X.D.m.thicknesses.filter(function (t) { return t.mm === sku.mm; })[0] || {}).kraftPlies || '—') + ' kraft plies · overlay ' + (sku.gradeId === 'EX' || sku.mm >= 2 ? '45' : '25') + ' gsm · ' + sku.faces + ' decor face' + (sku.faces > 1 ? 's' : '') : '—') + '</div>' +
+        '<div class="k">QC on this daylight</div><div class="v">' + (qc.length ? qc.map(function (q) { return '<span class="badge b-amber">' + X.esc(q.defect) + '</span> ' + X.n(q.sheets) + ' sheets downgraded to B-grade'; }).join('<br>') : '<span class="ok-val">no downgrade recorded</span>') + '</div>' +
+      '</div></div></div></div>' +
+      '<div class="grid-2-1"><div class="card"><div class="card-head"><i class="fa-solid fa-diagram-project"></i> Recall scope — everything this mould set pressed in the same campaign <span class="right hint">' + X.n(sheets) + ' sheets · ' + Object.keys(custs).length + ' customers · ' + Object.keys(orders).length + ' orders</span></div><div class="card-body">' +
+      '<div class="tbl-wrap" id="sc-wrap"><table class="tbl" id="sc"><thead><tr><th>When</th><th>Cycle</th><th>Press</th><th class="num">DL</th><th>Product</th><th>Order line</th><th>Customer</th><th class="num">Plates</th><th class="num">Sheets</th></tr></thead><tbody>' +
+      scope.slice(0, 300).map(function (x) { var l = lineOf(x.line), s = l.skuId && m.skus[l.skuId];
+        return '<tr' + (x.c === c && x.r === r ? ' class="sel"' : '') + '><td class="mono">' + X.fmt(x.c.s0) + '</td><td><a class="mono" href="loadbuilder.html#' + x.c.id + '">' + x.c.id + '</a></td><td>' + x.c.p + '</td><td class="num mono">' + (x.r + 1) + '</td><td>' + (s ? sw(s.decorId) + X.esc(X.skuText(m, s.id)) : '') + '</td><td>' + (l.norm ? '<span class="hint">stock norm</span>' : '<a class="mono" href="orders.html#' + X.esc(l.id) + '">' + X.esc(l.id) + '</a>') + '</td><td>' + X.esc(X.custName(l.cust)) + '</td><td class="num mono">' + x.plates + '</td><td class="num mono">' + X.n(x.n) + '</td></tr>'; }).join('') +
+      (scope.length > 300 ? '<tr><td colspan="9" class="hint">… ' + (scope.length - 300) + ' more rows — the Excel export has them all</td></tr>' : '') + '</tbody></table></div>' +
+      '<div class="note"><i class="fa-solid fa-circle-info"></i><span>A plate defect belongs to the <b>mould set</b>, so the scope is every sheet that set pressed since its last refurbishment' + (until != null ? ' and before its next one' : '') + ' — across presses, orders and customers. Narrow it with the cycle (one press load) or widen it with the paper lot when the fault is in the paper.</span></div></div></div>' +
+      '<div class="card"><div class="card-head"><i class="fa-solid fa-route"></i> Other scopes from the same sheet</div><div class="card-body">' +
+      '<div class="step"><div class="n">1</div><div><b>This press cycle</b> — ' + X.n(c.sheets) + ' sheets in ' + c.rows.filter(function (w) { return w.s; }).length + ' daylights, ' + c.thick.map(function (t) { return t + ' mm'; }).join(', ') + '. Use it when the cure profile is suspect (temperature, pressure, time). <a href="loadbuilder.html#' + c.id + '">Open the load map</a></div></div>' +
+      '<div class="step"><div class="n">2</div><div><b>This mould set</b> — ' + X.esc(rw.s) + ', ' + X.n(sheets) + ' sheets this campaign. Use it for plate marks, gloss streaks and emboss faults. <a href="moulds.html#' + X.esc(rw.s) + '">Open the set</a></div></div>' +
+      '<div class="step"><div class="n">3</div><div><b>This paper lot</b> — ' + (lot ? X.esc(lot.po.id) + ' (' + X.esc(X.decor(sku.decorId).name) + ')' : 'opening stock') + '. Use it for print, shade or paper faults; every line of this design pressed after that receipt is in scope. ' + (sku ? '<a href="materials.html#' + X.esc(sku.decorId) + '">Open the design</a>' : '') + '</div></div>' +
+      '<div class="step"><div class="n">4</div><div><b>This shift</b> — ' + X.shiftOf(c.s0) + ' of ' + X.fmtD(c.s0) + ', in-charge ' + X.esc(S.incharge || '') + '. <a href="workorders.html">Open the shift work order</a></div></div>' +
+      '</div></div></div>';
+  }
+
+  $('go').addEventListener('click', function () { var f = search($('q').value); if (!f) { $('err').innerHTML = '<span class="deviation">No sheet, cycle, order line or mould set matches that. Try a print mark like <span class="mono">' + X.esc(X.D.m.printMark[1].value) + '</span>.</span>'; return; } $('err').innerHTML = ''; cur = f; show(); });
+  $('q').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('go').click(); });
+  $('egs').addEventListener('click', function (e) { var b = e.target.closest('[data-eg]'); if (!b) return; $('q').value = b.getAttribute('data-eg'); $('go').click(); });
+  $('xl').addEventListener('click', function () {
+    if (!cur) return;
+    X.xlsx([{ name: 'Recall scope', cols: ['When', 'Cycle', 'Press', 'Daylight', 'Mould set', 'SKU', 'Product', 'Order line', 'Order', 'Customer', 'Plates', 'Sheets', 'Print mark'],
+      rows: scope.map(function (x) { var l = lineOf(x.line), s = l.skuId && m.skus[l.skuId]; return [X.fmt(x.c.s0), x.c.id, x.c.p, x.r + 1, x.c.rows[x.r].s, l.skuId || '', s ? X.skuText(m, s.id) : '', l.norm ? 'stock norm' : l.id, l.orderId || '', X.custName(l.cust), x.plates, x.n, X.printMark(x.c, x.r)]; }),
+      widths: [18, 10, 7, 9, 11, 24, 46, 16, 12, 28, 8, 8, 34] }], 'Merino_Recall_Scope_' + X.yymmdd(X.ASOF) + '.xlsx');
+  });
+  window.addEventListener('hashchange', function () { var h = X.hashParam(); if (!R) return; var f = h === 'complaint' ? complaint() : search(h); if (f) { cur = f; show(); } });
+  X.withPlan(render);
+  X.whenPlanChanges(function (r) { R = r; m = r.m; if (cur) { var f = search($('q').value); cur = f || cur; } show(); });
+</script>
+</body>
+</html>

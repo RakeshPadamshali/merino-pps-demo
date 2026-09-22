@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mould Board · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  #board-wrap { max-height:560px; }
+  #cal-wrap { max-height:420px; }
+  .cl { display:inline-block; font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; border:1px solid var(--color-border); margin-right:2px; }
+  .cl.on { background:#e8f5e9; border-color:#c8e6c9; color:#2e7d32; } .cl.off { color:#b0b8c1; text-decoration:line-through; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--color-text-muted); margin-top:8px; align-items:center; }
+  .legend i.sw { display:inline-block; width:14px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  .wibar { background:#fff8e1; border:1px solid #ffe082; border-radius:6px; padding:8px 12px; font-size:12px; color:#6d4c00; display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .cov td.c { text-align:center; cursor:pointer; } .cov td.c:hover { background:#e4f0fa; } .cov td.c.none { color:#c3c9d0; cursor:default; } .cov td.c.sel { background:#e4f0fa; box-shadow:inset 0 0 0 2px var(--color-primary); }
+  .cov td.fam { font-size:10px; text-transform:uppercase; letter-spacing:.3px; color:var(--color-text-muted); font-weight:700; background:#fbfcfd; }
+  .hc-row { display:grid; grid-template-columns:70px 1fr 64px; gap:8px; align-items:center; font-size:12px; padding:5px 0; border-bottom:1px solid var(--color-border-light); }
+  .hc-row:last-child { border-bottom:none; }
+  .alert-li { font-size:12px; padding:5px 0; border-bottom:1px solid var(--color-border-light); } .alert-li:last-child { border-bottom:none; }
+  .imp-t td.up { color:#2e7d32; font-weight:600; } .imp-t td.down { color:#c62828; font-weight:600; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Mould Board — where every set is, how much life it has left, and what it may still press</h1><div class="crumb">Scheduling › Mould Board › <span id="ctx"></span></div></div>
+    <div class="actions"><a class="btn btn-outline btn-sm" href="masters.html#mouldSets"><i class="fa-solid fa-database"></i> Mould set master</a><button class="btn btn-outline btn-sm" id="xl"><i class="fa-solid fa-file-excel"></i> Excel</button></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div id="wibar"></div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-clone"></i> <span id="dtitle">Texture</span><span class="right" id="dact"></span></div>
+    <div class="card-body">
+      <div class="grid-1-2" style="margin-bottom:10px"><div id="dinfo"></div><div id="dimp"></div></div>
+      <div class="filters" id="gpager" style="margin-bottom:6px"></div>
+      <div class="gantt" id="gantt"></div>
+      <div class="legend"><span><i class="sw" style="background:#c9ced4"></i>Pressed (history)</span><span><i class="sw" style="background:#2a78d6"></i>Planned in a press (label = press · cycles)</span><span><i class="sw" style="background:#fab219"></i>Refurbishment (48 h)</span><span><i class="sw" style="background:#ec835a"></i>Refurbishment — what-if</span><span><i class="sw" style="background:#1f2733;width:2px"></i>As-of</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-table-list"></i> Mould sets <span class="right hint" id="bcount"></span></div>
+    <div class="card-body">
+      <div class="filters">
+        <span class="fl">Bed</span><select id="f-bed"><option value="">All</option><option value="8">8 ft</option><option value="14">14 ft</option><option value="16">16 ft</option></select>
+        <span class="fl">Family</span><select id="f-fam"><option value="">All</option></select>
+        <span class="fl">Status</span><select id="f-st"><option value="">All sets</option><option value="press">In a press now</option><option value="store">In the store now</option><option value="refurb">In refurbishment now</option><option value="booked">Refurbishment booked in the plan</option><option value="belowA">Below class-A health now</option><option value="ded">Dedicated to a customer</option></select>
+        <span class="fl">Search</span><input id="f-q" placeholder="set / texture / customer" size="22">
+      </div>
+      <div class="tbl-wrap" id="board-wrap"><table class="tbl" id="board"></table></div>
+      <div class="note"><i class="fa-solid fa-circle-info"></i><span><b>One set, one press at a time.</b> A set is sized to one bed length and can only be mounted on a press of that bed (and, for a dedicated set, only on its locked press for its customer). Every cycle a set is in a press adds one to its counter; health = life left ÷ life limit. The planner only gives a set work its health still allows, books refurbishment before it wears out, and sends a worn idle set early when class-A work of its texture is waiting — one set of a texture at a time, so the texture keeps running.</span></div>
+    </div>
+  </div>
+  <div class="grid-2-1">
+    <div class="card">
+      <div class="card-head"><i class="fa-solid fa-screwdriver-wrench"></i> Refurbishment calendar <span class="right"><select id="f-per" class="btn-sm" style="font:12px 'Roboto';padding:3px 6px;border:1px solid var(--color-border);border-radius:5px"><option value="plan">Booked in the plan</option><option value="hist">Last 14 days</option><option value="all">Both</option></select></span></div>
+      <div class="card-body"><div class="tbl-wrap" id="cal-wrap"><table class="tbl" id="cal"></table></div></div>
+    </div>
+    <div>
+      <div class="card"><div class="card-head"><i class="fa-solid fa-heart-pulse"></i> How mould health narrows eligibility</div><div class="card-body" id="hc"></div></div>
+      <div class="card"><div class="card-head"><i class="fa-solid fa-triangle-exclamation"></i> Mould alerts in the plan</div><div class="card-body" id="alerts"></div></div>
+    </div>
+  </div>
+  <div class="card"><div class="card-head"><i class="fa-solid fa-border-all"></i> Texture × bed coverage — which textures can run on which press size <span class="right hint">click a cell to open that texture</span></div><div class="card-body"><div class="tbl-wrap"><table class="tbl cov" id="cov"></table></div></div></div>
+</main></div>
+<script>window.MER_PAGE='moulds'; window.MER_TITLE='Mould Board'; window.MER_ICON='fa-clone';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script><script src="assets/vendor/xlsx.full.min.js"></script>
+<script>
+  var X = window.MERX, R = null, m = null, V = null, selSet = null, gp = null, gdraw = null, $ = function (id) { return document.getElementById(id); };
+  var C = X.COLOR.status;
+  function hcol(h) { return h >= m.health.A ? C.good : h >= m.health.B ? C.warning : h >= m.health.C ? C.serious : C.critical; }
+  function gauge(h, tip) {
+    var w = Math.max(0, Math.min(1, h)) * 100;
+    return '<div class="gauge" title="' + X.esc(tip || '') + '"><div class="g-fill" style="width:' + w.toFixed(1) + '%;background:' + hcol(h) + '"></div>' +
+      ['A', 'B', 'C'].map(function (k) { return '<div class="g-mark" style="left:' + (m.health[k] * 100).toFixed(1) + '%" title="class ' + k + ' needs ≥ ' + X.pct(m.health[k], 0) + '"></div>'; }).join('') + '</div>';
+  }
+  function serves(h, off) { return ['A', 'B', 'C'].map(function (k) { return '<span class="cl ' + (!off && h >= m.health[k] ? 'on' : 'off') + '" title="class ' + k + ': ' + X.esc(hcMeaning(k)) + '">' + k + '</span>'; }).join(''); }
+  function hcMeaning(k) { return ((X.D.cfg.healthClasses || []).filter(function (x) { return x.id === k; })[0] || {}).meaning || ''; }
+  function famOf(s) { return (m.finishes[s.finishId] || {}).familyId; }
+  function fitsPresses(s) { return m.presses.filter(function (p) { return p.bed === s.bed && (!s.pressLock || p.id === s.pressLock) && (famOf(s) !== 'GLS' || p.gloss); }).map(function (p) { return p.id; }); }
+
+  // ------------------------------------------------------------------ one pass over the cycles: runs, counters, refurbishments
+  function derive(r) {
+    if (r._mould) return r._mould;
+    var hs = r.hist.state, fs = r.state, U = {}, T = r.m.asOf;
+    r.m.setList.forEach(function (s) { U[s.id] = { s: s, runs: [], histCyc: 0, planCyc: 0, planSheets: 0, planPress: {} }; });
+    r.cycles.forEach(function (c, i) {
+      var hist = i < r.nHist, seen = {};
+      c.rows.forEach(function (rw) { if (!rw.s || !U[rw.s]) return; var x = seen[rw.s] = seen[rw.s] || { dl: 0, sh: 0, clean: 0 }; x.dl++; if (rw.clean) x.clean++; rw.pl.forEach(function (q) { x.sh += q[1]; }); });
+      Object.keys(seen).forEach(function (sid) {
+        var u = U[sid], last = u.runs[u.runs.length - 1], x = seen[sid], cnt = c.setCounters ? c.setCounters[sid] : null;
+        if (hist) u.histCyc++; else { u.planCyc++; u.planSheets += x.sh; u.planPress[c.p] = (u.planPress[c.p] || 0) + 1; }
+        if (last && last.p === c.p && last.hist === hist && c.start - last.e <= 90) { last.e = c.end; last.n++; last.dl += x.dl; last.sh += x.sh; last.clean += x.clean; if (cnt != null) last.c1 = cnt; }
+        else u.runs.push({ p: c.p, s: c.start, e: c.end, n: 1, dl: x.dl, sh: x.sh, clean: x.clean, hist: hist, c0: cnt, c1: cnt });
+      });
+    });
+    var mountedNow = {};
+    Object.keys(hs.presses).forEach(function (pid) { hs.presses[pid].rows.forEach(function (rw) { if (rw.set) mountedNow[rw.set] = (mountedNow[rw.set] || 0) + 1; }); });
+    r.m.setList.forEach(function (s) {
+      var u = U[s.id], H = hs.sets[s.id] || {}, F = fs.sets[s.id] || { refurbs: [] };
+      u.refurbs = (F.refurbs || []).slice().sort(function (a, b) { return a.from - b.from; });
+      u.wi = u.refurbs.filter(function (x) { return x.whatif; })[0] || null;
+      u.counterNow = u.wi ? 0 : H.counter || 0;
+      u.refurbNow = u.wi ? u.wi.to : H.refurbUntil > T ? H.refurbUntil : null;
+      u.onNow = !u.refurbNow && H.on ? H.on : null; u.dlNow = u.onNow ? mountedNow[s.id] || 0 : 0;
+      u.healthNow = 1 - u.counterNow / s.limit; u.healthEnd = 1 - (F.counter || 0) / s.limit;
+      u.planRefurbs = u.refurbs.filter(function (x) { return x.from >= T; }); u.histRefurbs = u.refurbs.filter(function (x) { return x.from < T; });
+      u.next = u.planRefurbs[0] || null;
+      u.state = u.refurbNow ? 'refurb' : u.onNow ? 'press' : 'store';
+    });
+    // texture gaps: every shared set of a texture and bed in refurbishment at the same time while its work is open
+    var gaps = [];
+    Object.keys(r.m.setsByKey).forEach(function (k) {
+      var ss = r.m.setsByKey[k].filter(function (s) { return !s.dedicatedTo; }); if (!ss.length) return;
+      var pts = [T, r.m.end]; ss.forEach(function (s) { U[s.id].refurbs.forEach(function (x) { if (x.to > T && x.from < r.m.end) { pts.push(Math.max(T, x.from)); pts.push(Math.min(r.m.end, x.to)); } }); });
+      pts = pts.filter(function (v, i, a) { return a.indexOf(v) === i; }).sort(function (a, b) { return a - b; });
+      var cur = null;
+      for (var i = 0; i < pts.length - 1; i++) {
+        var mid = (pts[i] + pts[i + 1]) / 2, all = ss.every(function (s) { return U[s.id].refurbs.some(function (x) { return x.from <= mid && x.to > mid; }); });
+        if (all) { if (cur && cur.e === pts[i]) cur.e = pts[i + 1]; else { cur = { key: k, fin: ss[0].finishId, bed: ss[0].bed, s: pts[i], e: pts[i + 1], sets: ss.map(function (s) { return s.id; }) }; gaps.push(cur); } }
+      }
+    });
+    r._mould = { U: U, gaps: gaps };
+    return r._mould;
+  }
+
+  function render(r) {
+    R = r; m = r.m; V = derive(r);
+    var U = V.U, sets = m.setList, T = X.ASOF;
+    var n = function (f) { return sets.filter(function (s) { return f(U[s.id], s); }).length; };
+    var planRef = [], histRef = [];
+    sets.forEach(function (s) { U[s.id].planRefurbs.forEach(function (x) { planRef.push([s, x]); }); U[s.id].histRefurbs.forEach(function (x) { histRef.push([s, x]); }); });
+    var early = planRef.filter(function (x) { return x[1].early; }).length, wi = planRef.filter(function (x) { return x[1].whatif; }).length, singles = V.gaps.filter(function (g) { return g.sets.length === 1; }).length;
+    $('ctx').textContent = sets.length + ' mould sets · ' + Object.keys(m.finishes).length + ' textures · as of ' + X.fmt(T);
+    var beds = [8, 14, 16].map(function (b) { return n(function (u, s) { return s.bed === b; }) + ' × ' + b + ' ft'; }).join(' · ');
+    $('kpis').innerHTML = [
+      ['Mould sets', X.n(sets.length), beds, 'blue'],
+      ['In a press now', X.n(n(function (u) { return u.state === 'press'; })), 'mounted in daylights at the as-of', 'blue'],
+      ['In refurbishment now', X.n(n(function (u) { return u.state === 'refurb'; })), 'back in the store after ' + (m.refurbMin / 60) + ' h', 'amber'],
+      ['Refurbishments in the plan', X.n(planRef.length), early + ' early · ' + (planRef.length - early - wi) + ' at the life limit' + (wi ? ' · ' + wi + ' what-if' : ''), 'amber'],
+      ['Below class-A health now', X.n(n(function (u) { return !u.refurbNow && u.healthNow < m.health.A; })), 'cannot press export grade, gloss or dark solids', 'grey'],
+      ['Texture gaps in the plan', X.n(V.gaps.length), V.gaps.length ? singles + ' single-set texture' + (singles === 1 ? '' : 's') + (V.gaps.length - singles ? ' · ' + (V.gaps.length - singles) + ' with every twin off' : '') + ' in refurbishment' : 'every texture always has a set', V.gaps.length ? 'amber' : 'green']
+    ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');
+    // families filter (once)
+    if ($('f-fam').options.length <= 1) $('f-fam').innerHTML += Object.keys(m.families).map(function (f) { return '<option value="' + f + '">' + X.esc(m.families[f].name) + '</option>'; }).join('');
+    var st = X.settings(), wis = st.whatifs.filter(function (w) { return w.type === 'refurb'; });
+    $('wibar').innerHTML = wis.length ? '<div class="wibar"><i class="fa-solid fa-flask"></i><span>' + wis.map(function (w) { return '<b>' + X.esc(X.whatifLabel(w)) + '</b>'; }).join(' · ') + ' — the plan on every page already runs without ' + (wis.length > 1 ? 'these sets' : 'this set') + '.</span>' +
+      wis.map(function (w) { return '<button class="btn btn-outline btn-sm" data-rmw="' + X.esc(w.id) + '"><i class="fa-solid fa-xmark"></i> Remove ' + X.esc(w.setId) + '</button>'; }).join('') + '</div>' : '';
+    if (!selSet || !m.sets[selSet]) { var h = X.hashParam(); selSet = m.sets[h] ? h : wis.length ? wis[wis.length - 1].setId : X.D.scenarios.S3.setId; }
+    detail(); board(); calendar(); health(); alerts(); coverage();
+  }
+
+  // ------------------------------------------------------------------ selected texture: info, what-if impact, set lanes
+  function detail() {
+    var s = m.sets[selSet], u = V.U[selSet], fam = famOf(s), fin = s.finishId, T = X.ASOF;
+    $('dtitle').innerHTML = X.esc(X.finishName(fin)) + ' <span class="hint">(' + X.esc((m.families[fam] || {}).name || fam) + ')</span> — set <b class="mono">' + X.esc(s.id) + '</b> and its twins';
+    var wiOn = X.settings().whatifs.filter(function (w) { return w.type === 'refurb' && w.setId === s.id; })[0];
+    $('dact').innerHTML = wiOn ? '<button class="btn btn-outline btn-sm" id="undo"><i class="fa-solid fa-rotate-left"></i> Put ' + X.esc(s.id) + ' back (remove what-if)</button>' :
+      u.state === 'refurb' ? '<span class="hint">already in refurbishment until ' + X.fmt(u.refurbNow) + '</span>' :
+      '<button class="btn btn-brand btn-sm" id="send"><i class="fa-solid fa-screwdriver-wrench"></i> Send ' + X.esc(s.id) + ' for refurbishment now (' + (m.refurbMin / 60) + ' h)</button>';
+    // open work of this texture on this bed, by health class
+    var open = { A: [0, 0], B: [0, 0], C: [0, 0] };
+    R.lines.forEach(function (x) {
+      if (x.norm || x.status === 'Done' || x.status === 'Cancelled') return;
+      var k = m.skus[x.skuId]; if (!k || k.finishId !== fin || !k.presses.some(function (pid) { return m.pressById[pid].bed === s.bed; })) return;
+      var c = X.E.lineClass(k, x.cls); open[c][0]++; open[c][1] += x.btp;
+    });
+    var twins = (m.setsByKey[fin + '|' + s.bed] || []).filter(function (t) { return t.id !== s.id; });
+    $('dinfo').innerHTML = '<div class="kv">' +
+      '<div class="k">Set</div><div class="v"><b class="mono">' + X.esc(s.id) + '</b> · ' + s.bed + ' ft bed · ' + s.plates + ' plates (' + Math.floor(s.plates / 8) + ' HPL daylights) · life ' + s.limit + ' cycles</div>' +
+      (s.dedicatedTo ? '<div class="k">Dedicated</div><div class="v"><span class="chip lock"><i class="fa-solid fa-lock"></i> ' + X.esc(X.custName(s.dedicatedTo)) + ' · ' + X.esc(s.pressLock) + ' only</span></div>' : '') +
+      '<div class="k">Now</div><div class="v">' + nowText(u) + '</div>' +
+      '<div class="k">Health now</div><div class="v" style="display:flex;gap:8px;align-items:center"><div style="width:140px">' + gauge(u.healthNow) + '</div><b class="mono">' + X.pct(u.healthNow, 0) + '</b> <span class="hint">counter ' + u.counterNow + ' / ' + s.limit + (u.refurbNow ? ' · full life when it is back' : '') + '</span> ' + serves(u.healthNow, !!u.refurbNow) + '</div>' +
+      '<div class="k">Fits presses</div><div class="v">' + fitsPresses(s).map(function (p) { return '<span class="chip">' + p + '</span>'; }).join(' ') + '</div>' +
+      '<div class="k">Next 21 days</div><div class="v">' + u.planCyc + ' cycles · ' + X.n(u.planSheets) + ' sheets' + (u.next ? ' · refurbishment ' + X.fmt(u.next.from) + ' (' + trig(u.next) + ')' : ' · no refurbishment needed') + '</div>' +
+      '<div class="k">Twin sets</div><div class="v">' + (twins.length ? twins.map(function (t) { var v = V.U[t.id]; return '<span class="chip" title="' + X.esc(nowPlain(v)) + '">' + X.esc(t.id) + ' · ' + (v.refurbNow ? 'in refurb' : X.pct(v.healthNow, 0)) + (t.dedicatedTo ? ' · dedicated' : '') + '</span>'; }).join(' ') : '<span class="deviation">none — the only ' + s.bed + ' ft set of this texture</span>') + '</div>' +
+      '<div class="k">Open work it may press</div><div class="v">' + ['A', 'B', 'C'].map(function (c) { var ok = !u.refurbNow && u.healthNow >= m.health[c]; return open[c][0] ? '<span class="' + (ok ? 'ok-val' : 'deviation') + '">class ' + c + ': ' + open[c][0] + ' lines · ' + X.n(open[c][1]) + ' sheets ' + (ok ? '✓' : '✗') + '</span>' : null; }).filter(Boolean).join('<br>') || '<span class="hint">no open lines of this texture for a ' + s.bed + ' ft press</span>' + '</div>' +
+      '</div>';
+    impact(s, wiOn);
+    // lanes: every set of this texture, all beds
+    var lanes = m.setList.filter(function (t) { return t.finishId === fin; }).sort(function (a, b) { return a.bed - b.bed || (a.id < b.id ? -1 : 1); });
+    var bars = [];
+    lanes.forEach(function (t) {
+      var v = V.U[t.id];
+      v.runs.forEach(function (x, i) { bars.push({ lane: t.id, s: x.s, e: x.e, color: x.hist ? C.hist : X.COLOR.accent, label: x.p + ' · ' + x.n, id: t.id,
+        tip: t.id + ' in ' + m.pressById[x.p].name + ' · ' + x.n + ' cycle' + (x.n > 1 ? 's' : '') + ' · ' + x.dl + ' daylight-loads · ' + X.n(x.sh) + ' sheets' + (x.clean ? ' · ' + x.clean + ' cleaning pass' + (x.clean > 1 ? 'es' : '') : '') + (x.c0 != null ? ' · counter ' + x.c0 + ' → ' + x.c1 : '') + ' · ' + X.fmt(x.s) + ' – ' + X.fmt(x.e) + (x.hist ? ' (pressed)' : ' (plan)') }); });
+      v.refurbs.forEach(function (x) { bars.push({ lane: t.id, s: x.from, e: x.to, color: x.whatif ? C.serious : C.warning, label: x.whatif ? 'Refurb · what-if' : 'Refurbishment', id: t.id, tip: t.id + ' refurbishment ' + X.fmt(x.from) + ' – ' + X.fmt(x.to) + ' · ' + trig(x) }); });
+    });
+    var L = lanes.map(function (t) { var v = V.U[t.id]; return { id: t.id, label: t.id, sub: t.bed + ' ft' + (t.dedicatedTo ? ' · ded.' : '') + ' · ' + (v.refurbNow ? 'refurb' : X.pct(v.healthNow, 0)) }; });
+    gdraw = function (w) { X.gantt($('gantt'), L, bars, { startMin: w.startMin, endMin: w.endMin, laneW: 170, laneTitle: 'Mould set', onClick: function (id) { if (id !== selSet) { selSet = id; detail(); markBoard(); } } }); };
+    if (!gp) gp = X.pager($('gpager'), function (w) { if (gdraw) gdraw(w); }, { days: 7, from: 0 }); else gdraw(gp.win());
+  }
+  function nowText(u) {
+    return u.state === 'refurb' ? X.badge('In refurbishment', 'In refurbishment ' + (u.wi ? '(what-if) ' : '') + 'until ' + X.fmt(u.refurbNow)) :
+      u.state === 'press' ? X.badge('Running', 'In ' + m.pressById[u.onNow].name + ' · ' + u.dlNow + ' daylight' + (u.dlNow === 1 ? '' : 's')) : X.badge('Planned', 'In the store');
+  }
+  function nowPlain(u) { return u.state === 'refurb' ? 'in refurbishment until ' + X.fmt(u.refurbNow) : u.state === 'press' ? 'in ' + m.pressById[u.onNow].name : 'in the store'; }
+  function trig(x) {
+    return x.whatif ? 'what-if: taken off now' : x.early ? 'early — below class-A health while class-A work waits (counter ' + x.counter + ')' :
+      'life limit reached after cycle ' + x.cycle + (x.press ? ' on ' + x.press : '') + ' (counter ' + x.counter + ')';
+  }
+
+  // what the refurbishment what-if changed: this texture's sets before / after, lines of the texture, plan KPIs
+  function impact(s, wiOn) {
+    var el = $('dimp');
+    if (!wiOn) {
+      var S3 = X.D.scenarios.S3;
+      el.innerHTML = '<div class="note" style="margin-top:0"><i class="fa-solid fa-circle-info"></i><span>' + (s.id === S3.setId ? '<b>Scenario S3.</b> Inspection finds a scratched plate on <b>' + X.esc(s.id) + '</b>. Send it for refurbishment now and the plan re-runs without it: its work moves to the twin sets or to another bed size, class-A work waits for a set with enough health, and the refurbishment calendar and every page update.' :
+        'Send any set for refurbishment now to see what moves: the plan re-runs without it for ' + (m.refurbMin / 60) + ' h — its work goes to the twin sets, another bed size or later, and every page follows.') + '</span></div>';
+      return;
+    }
+    var st = X.settings(), before = { preset: st.preset, weights: st.weights, whatifs: st.whatifs.filter(function (w) { return w.id !== wiOn.id; }) };
+    el.innerHTML = '<div class="hint">Comparing with the plan before this what-if…</div>';
+    X.withPlan(function (B) {
+      var VB = derive(B), fin = s.finishId, rows = m.setList.filter(function (t) { return t.finishId === fin; }).sort(function (a, b) { return a.bed - b.bed || (a.id < b.id ? -1 : 1); });
+      var later = 0, earlier = 0, newLate = 0;
+      R.lines.forEach(function (a) { var b = B.byId[a.id], k = m.skus[a.skuId]; if (!b || !k || k.finishId !== fin || a.norm) return; if (a.ready !== b.ready) { if ((a.ready || 1e12) > (b.ready || 1e12)) later++; else earlier++; } if (a.lateDays > 0 && !(b.lateDays > 0)) newLate++; });
+      el.innerHTML = '<table class="tbl imp-t"><thead><tr><th>Set</th><th class="num">Cycles before</th><th class="num">Cycles now</th><th class="num">Sheets before</th><th class="num">Sheets now</th></tr></thead><tbody>' +
+        rows.map(function (t) { var a = V.U[t.id], b = VB.U[t.id], d = a.planCyc - b.planCyc; return '<tr' + (t.id === s.id ? ' class="sel"' : '') + '><td class="mono strong">' + X.esc(t.id) + ' <span class="hint">' + t.bed + ' ft</span></td><td class="num mono">' + b.planCyc + '</td><td class="num mono ' + (d > 0 ? 'up' : d < 0 ? 'down' : '') + '">' + a.planCyc + (d ? ' (' + (d > 0 ? '+' : '') + d + ')' : '') + '</td><td class="num mono">' + X.n(b.planSheets) + '</td><td class="num mono">' + X.n(a.planSheets) + '</td></tr>'; }).join('') + '</tbody></table>' +
+        '<div class="small" style="margin-top:8px">Lines of this texture re-timed: <b>' + (later + earlier) + '</b> (' + later + ' later, ' + earlier + ' earlier) · newly late: <b class="' + (newLate ? 'deviation' : '') + '">' + newLate + '</b> · plan OTIF ' + X.pct(B.kpi.otif, 1) + ' → <b>' + X.pct(R.kpi.otif, 1) + '</b> · delay cost ' + X.rs(B.kpi.delayCost) + ' → <b>' + X.rs(R.kpi.delayCost) + '</b></div>' +
+        '<div class="note"><i class="fa-solid fa-circle-info"></i><span>A refurbished set comes back at full health, so after ' + (m.refurbMin / 60) + ' h it can take class-A work again — the knock-on effects on the rest of the plan are part of the answer, not noise.</span></div>';
+    }, before, 'Comparing with the plan before this what-if');
+  }
+
+  // ------------------------------------------------------------------ board
+  function board() {
+    var bed = $('f-bed').value, fam = $('f-fam').value, stf = $('f-st').value, q = $('f-q').value.trim().toLowerCase();
+    var rows = m.setList.filter(function (s) {
+      var u = V.U[s.id];
+      if (bed && s.bed !== +bed) return false; if (fam && famOf(s) !== fam) return false;
+      if (stf === 'press' && u.state !== 'press') return false; if (stf === 'store' && u.state !== 'store') return false; if (stf === 'refurb' && u.state !== 'refurb') return false;
+      if (stf === 'booked' && !u.planRefurbs.length) return false; if (stf === 'belowA' && (u.refurbNow || u.healthNow >= m.health.A)) return false; if (stf === 'ded' && !s.dedicatedTo) return false;
+      if (q && (s.id + ' ' + X.finishName(s.finishId) + ' ' + (s.dedicatedTo ? X.custName(s.dedicatedTo) : '')).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    }).sort(function (a, b) { return famOf(a) < famOf(b) ? -1 : famOf(a) > famOf(b) ? 1 : a.finishId < b.finishId ? -1 : a.finishId > b.finishId ? 1 : a.bed - b.bed || (a.id < b.id ? -1 : 1); });
+    $('bcount').textContent = rows.length + ' of ' + m.setList.length + ' sets';
+    $('board').innerHTML = '<thead><tr><th>Set</th><th>Texture</th><th>Bed · fits</th><th>Now</th><th>Health now · counter</th><th>May press</th><th class="num">Cycles, next 21 d</th><th>Next refurbishment</th><th class="num">Health at end</th></tr></thead><tbody>' +
+      rows.map(function (s) {
+        var u = V.U[s.id];
+        return '<tr data-set="' + X.esc(s.id) + '" style="cursor:pointer"' + (s.id === selSet ? ' class="sel"' : '') + '><td class="mono strong">' + X.esc(s.id) + (s.dedicatedTo ? ' <span class="chip lock" title="dedicated to ' + X.esc(X.custName(s.dedicatedTo)) + ', ' + X.esc(s.pressLock) + ' only"><i class="fa-solid fa-lock"></i> ' + X.esc(X.custName(s.dedicatedTo).split(' ')[0]) + '</span>' : '') + '</td><td>' + X.esc(X.finishName(s.finishId)) + ' <span class="hint">' + X.esc((m.families[famOf(s)] || {}).name || '') + '</span></td>' +
+          '<td class="mono">' + s.bed + ' ft <span class="hint">' + fitsPresses(s).join(' ') + '</span></td>' +
+          '<td>' + nowText(u) + '</td><td><div style="display:flex;gap:6px;align-items:center"><div style="width:90px">' + gauge(u.healthNow, X.pct(u.healthNow, 0) + ' of life left') + '</div><span class="mono">' + X.pct(u.healthNow, 0) + '</span> <span class="hint mono">' + u.counterNow + '/' + s.limit + '</span></div></td><td>' + serves(u.healthNow, !!u.refurbNow) + '</td>' +
+          '<td class="num mono">' + (u.planCyc || '<span class="hint">—</span>') + (u.planCyc ? ' <span class="hint">' + Object.keys(u.planPress).sort().join(' ') + '</span>' : '') + '</td>' +
+          '<td>' + (u.next ? X.fmt(u.next.from) + ' <span class="hint">' + (u.next.whatif ? 'what-if' : u.next.early ? 'early' : 'life limit') + '</span>' : '<span class="hint">—</span>') + '</td><td class="num mono">' + X.pct(u.healthEnd, 0) + '</td></tr>';
+      }).join('') + '</tbody>';
+  }
+  function markBoard() { [].forEach.call($('board').querySelectorAll('tr[data-set]'), function (tr) { tr.classList.toggle('sel', tr.getAttribute('data-set') === selSet); }); coverage(); }
+
+  // ------------------------------------------------------------------ refurbishment calendar
+  function calRows() {
+    var per = $('f-per').value, out = [];
+    m.setList.forEach(function (s) { V.U[s.id].refurbs.forEach(function (x) { var hist = x.from < X.ASOF; if ((per === 'plan' && hist) || (per === 'hist' && !hist)) return; out.push([s, x, hist]); }); });
+    return out.sort(function (a, b) { return a[1].from - b[1].from || (a[0].id < b[0].id ? -1 : 1); });
+  }
+  function calendar() {
+    var rows = calRows();
+    $('cal').innerHTML = '<thead><tr><th>Set</th><th>Texture</th><th class="num">Bed</th><th>Off</th><th>Back</th><th>Why</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(function (q) { var s = q[0], x = q[1]; return '<tr data-set="' + X.esc(s.id) + '" style="cursor:pointer"><td class="mono strong">' + X.esc(s.id) + '</td><td>' + X.esc(X.finishName(s.finishId)) + '</td><td class="num mono">' + s.bed + ' ft</td><td class="mono">' + X.fmt(x.from) + '</td><td class="mono">' + X.fmt(x.to) + '</td><td class="small">' + (x.whatif ? '<span class="badge b-amber">what-if</span> ' : q[2] ? '<span class="badge b-grey">done</span> ' : '') + X.esc(trig(x)) + '</td></tr>'; }).join('') :
+        '<tr><td colspan="6" class="hint">No refurbishments in this period.</td></tr>') + '</tbody>';
+  }
+
+  // ------------------------------------------------------------------ health classes + alerts + coverage
+  function health() {
+    var live = m.setList.filter(function (s) { return !V.U[s.id].refurbNow; }), cnt = function (lo, hi) { return live.filter(function (s) { var h = V.U[s.id].healthNow; return h >= lo && h < hi; }).length; };
+    var rows = [['A', m.health.A, 2, 'may press everything'], ['B', m.health.B, m.health.A, 'no class-A work'], ['C', m.health.C, m.health.B, 'woodgrain, stone, fabric, emboss only']];
+    $('hc').innerHTML = rows.map(function (q) { return '<div class="hc-row"><div><span class="cl on">' + q[0] + '</span> ≥ ' + X.pct(q[1], 0) + '</div><div class="small">' + X.esc(hcMeaning(q[0])) + '<div class="hint">sets now at ' + X.pct(q[1], 0) + (q[2] < 2 ? '–' + X.pct(q[2], 0) : '+') + ': ' + q[3] + '</div></div><div class="num mono strong" style="text-align:right">' + cnt(q[1], q[2]) + (cnt(q[1], q[2]) === 1 ? ' set' : ' sets') + '</div></div>'; }).join('') +
+      '<div class="hc-row"><div><span class="cl off">—</span></div><div class="small">In refurbishment now — no work until back</div><div class="num mono strong" style="text-align:right">' + (m.setList.length - live.length) + (m.setList.length - live.length === 1 ? ' set' : ' sets') + '</div></div>' +
+      '<div class="note"><i class="fa-solid fa-circle-info"></i><span>A line needs the class of its texture; export grade needs class A whatever the texture, and dark solids (shade 8–10) need class A. As a set wears, the work it may take narrows — the planner never puts a line on a set below its class.</span></div>';
+  }
+  function alerts() {
+    var out = [], T = X.ASOF;
+    V.gaps.slice().sort(function (a, b) { return a.s - b.s; }).forEach(function (g) {
+      var other = [8, 14, 16].filter(function (b) { return b !== g.bed && (m.setsByKey[g.fin + '|' + b] || []).length; }).map(function (b) { return b + ' ft'; }).join(' / ');
+      out.push('<div class="alert-li">' + (g.sets.length === 1 ? '<span class="badge b-amber">single set</span> <b>' + X.esc(X.finishName(g.fin)) + ' ' + g.bed + ' ft</b> has one shared set (' + g.sets[0] + '); it is in refurbishment ' : '<span class="badge b-red">texture gap</span> <b>' + X.esc(X.finishName(g.fin)) + ' ' + g.bed + ' ft</b> has every shared set (' + g.sets.join(', ') + ') in refurbishment ') +
+        X.fmt(g.s) + ' – ' + X.fmt(g.e) + ' — its ' + g.bed + ' ft work waits' + (other ? ' or moves to a ' + other + ' press where the size fits' : '') + '.</div>');
+    });
+    var soon = [];
+    m.setList.forEach(function (s) { var u = V.U[s.id]; u.planRefurbs.forEach(function (x) { if (!x.early && !x.whatif && x.from < T + 3 * 1440) soon.push([s, x]); }); });
+    soon.sort(function (a, b) { return a[1].from - b[1].from; }).slice(0, 6).forEach(function (q) { out.push('<div class="alert-li"><span class="badge b-amber">life limit</span> <b class="mono">' + X.esc(q[0].id) + '</b> reaches its life limit ' + X.fmt(q[1].from) + ' on ' + X.esc(q[1].press || '') + ' — refurbishment booked, back ' + X.fmt(q[1].to) + '.</div>'); });
+    var dedLow = m.setList.filter(function (s) { var u = V.U[s.id]; return s.dedicatedTo && !u.refurbNow && u.healthNow < m.health.A; });
+    dedLow.forEach(function (s) { out.push('<div class="alert-li"><span class="badge b-amber">dedicated</span> <b class="mono">' + X.esc(s.id) + '</b> (' + X.esc(X.custName(s.dedicatedTo)) + ') is at ' + X.pct(V.U[s.id].healthNow, 0) + ' — below class A.</div>'); });
+    $('alerts').innerHTML = out.length ? out.join('') : '<div class="hint">No mould alerts: every texture keeps a set through the horizon and no set reaches its life limit in the next 3 days.</div>';
+  }
+  function coverage() {
+    var fams = Object.keys(m.families), sel = m.sets[selSet], html = '<thead><tr><th>Texture</th><th class="num">Sets</th><th style="text-align:center">8 ft · P1 P2 P3</th><th style="text-align:center">14 ft · P4 P5</th><th style="text-align:center">16 ft · P6</th><th>Presses that can run it</th></tr></thead><tbody>';
+    fams.forEach(function (f) {
+      var fins = Object.keys(m.finishes).filter(function (id) { return m.finishes[id].familyId === f; }); if (!fins.length) return;
+      html += '<tr><td class="fam" colspan="6">' + X.esc(m.families[f].name) + ' · health class ' + X.esc(m.families[f].healthClass) + '</td></tr>';
+      fins.forEach(function (id) {
+        var all = m.setList.filter(function (s) { return s.finishId === id; }), pr = {};
+        html += '<tr><td>' + X.esc(m.finishes[id].name) + ' <span class="hint mono">' + id + '</span></td><td class="num mono">' + all.length + '</td>' + [8, 14, 16].map(function (b) {
+          var ss = m.setsByKey[id + '|' + b] || []; ss.forEach(function (s) { fitsPresses(s).forEach(function (p) { pr[p] = 1; }); });
+          if (!ss.length) return '<td class="c none">—</td>';
+          var ded = ss.filter(function (s) { return s.dedicatedTo; }).length, ref = ss.filter(function (s) { return V.U[s.id].refurbNow; }).length;
+          return '<td class="c' + (sel && sel.finishId === id && sel.bed === b ? ' sel' : '') + '" data-set="' + X.esc(ss[0].id) + '"><b class="mono">' + ss.length + '</b>' + (ded ? ' <span class="chip lock" title="dedicated">' + ded + ' ded.</span>' : '') + (ref ? ' <span class="chip" title="in refurbishment now">' + ref + ' refurb</span>' : '') + '</td>';
+        }).join('') + '<td>' + Object.keys(pr).sort().join(' ') + '</td></tr>';
+      });
+    });
+    $('cov').innerHTML = html + '</tbody>';
+  }
+
+  // ------------------------------------------------------------------ events
+  ['f-bed', 'f-fam', 'f-st'].forEach(function (id) { $(id).addEventListener('change', board); });
+  $('f-q').addEventListener('input', board);
+  $('f-per').addEventListener('change', calendar);
+  function pick(e) { var tr = e.target.closest('[data-set]'); if (!tr) return; selSet = tr.getAttribute('data-set'); detail(); markBoard(); $('dtitle').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  $('board').addEventListener('click', pick); $('cal').addEventListener('click', pick); $('cov').addEventListener('click', pick);
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'send') { var sid = selSet; X.replan(function () { X.addWhatif({ type: 'refurb', setId: sid, hours: m.refurbMin / 60 }); }, 'Re-planning without ' + sid, function (r) { render(r); X.toast(sid + ' is off for refurbishment in the live plan — every page follows'); }); }
+    else if (b.id === 'undo' || b.getAttribute('data-rmw')) {
+      var id = b.getAttribute('data-rmw') || (X.settings().whatifs.filter(function (w) { return w.type === 'refurb' && w.setId === selSet; })[0] || {}).id;
+      X.replan(function () { X.removeWhatif(id); }, 'Re-planning', function (r) { render(r); });
+    }
+  });
+  $('xl').addEventListener('click', function () {
+    var U = V.U;
+    X.xlsx([
+      { name: 'Mould sets', cols: ['Set', 'Texture', 'Family', 'Bed ft', 'Plates', 'Fits presses', 'Dedicated to', 'Press lock', 'Now', 'Health now %', 'Counter', 'Life limit', 'May press classes', 'Cycles next 21 d', 'Sheets next 21 d', 'Next refurbishment', 'Why', 'Health at horizon end %'],
+        rows: m.setList.map(function (s) { var u = U[s.id]; return [s.id, X.finishName(s.finishId), (m.families[famOf(s)] || {}).name, s.bed, s.plates, fitsPresses(s).join(' '), s.dedicatedTo ? X.custName(s.dedicatedTo) : '', s.pressLock || '', nowPlain(u), Math.round(u.healthNow * 100), u.counterNow, s.limit, u.refurbNow ? '' : ['A', 'B', 'C'].filter(function (k) { return u.healthNow >= m.health[k]; }).join(' '), u.planCyc, u.planSheets, u.next ? X.fmt(u.next.from) : '', u.next ? trig(u.next) : '', Math.round(u.healthEnd * 100)]; }),
+        widths: [11, 16, 16, 7, 7, 12, 26, 9, 26, 11, 9, 9, 16, 15, 15, 20, 60, 20] },
+      { name: 'Refurbishments', cols: ['Set', 'Texture', 'Bed ft', 'Off', 'Back', 'Period', 'Why'],
+        rows: (function () { var out = []; m.setList.forEach(function (s) { U[s.id].refurbs.forEach(function (x) { out.push([s.id, X.finishName(s.finishId), s.bed, X.fmt(x.from), X.fmt(x.to), x.from < X.ASOF ? 'History' : 'Plan', trig(x)]); }); }); return out; })(),
+        widths: [11, 16, 7, 18, 18, 9, 70] }
+    ], 'Merino_Mould_Board_' + X.yymmdd(X.ASOF) + '.xlsx');
+  });
+  window.addEventListener('hashchange', function () { var h = X.hashParam(); if (m && m.sets[h]) { selSet = h; detail(); markBoard(); } });
+  X.withPlan(render);
+  X.whenPlanChanges(function (r) { gp = null; $('gpager').innerHTML = ''; render(r); });
+</script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paper & Materials · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  #dec-wrap { max-height:430px; } #po-wrap { max-height:380px; }
+  .wibar { background:#fff8e1; border:1px solid #ffe082; border-radius:6px; padding:8px 12px; font-size:12px; color:#6d4c00; display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--color-text-muted); margin-top:6px; align-items:center; }
+  .legend i.sw { display:inline-block; width:14px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  .swatch { display:inline-block; width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,.15); vertical-align:-3px; margin-right:6px; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Paper &amp; Materials — decor paper by design, stock, China POs and the lines that wait</h1><div class="crumb">Materials › Paper &amp; Materials › <span id="ctx"></span></div></div>
+    <div class="actions"><a class="btn btn-outline btn-sm" href="masters.html#papers"><i class="fa-solid fa-database"></i> Paper master</a><button class="btn btn-outline btn-sm" id="xl"><i class="fa-solid fa-file-excel"></i> Excel</button></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div id="wibar"></div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-scroll"></i> <span id="dtitle">Decor paper</span><span class="right" id="dact"></span></div>
+    <div class="card-body">
+      <div class="grid-1-2"><div id="dinfo"></div><div><div id="proj" style="height:250px"></div><div class="legend"><span><i class="sw" style="background:#2a78d6"></i>Paper in stock (sheet-equivalents, one per laminate face)</span><span><i class="sw" style="background:#0ca30c"></i>PO receipt</span><span><i class="sw" style="background:#ec835a"></i>Original ETA of a delayed PO</span><span><i class="sw" style="background:#1f2733;width:2px"></i>As-of</span></div></div></div>
+      <div class="tbl-wrap" style="margin-top:10px;max-height:300px"><table class="tbl" id="dlines"></table></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-table-list"></i> Decor paper by design — stock, open POs and what the plan needs <span class="right hint" id="dcount"></span></div>
+    <div class="card-body">
+      <div class="filters">
+        <span class="fl">Show</span><select id="f-show"><option value="wait">Lines waiting for paper</option><option value="risk">Waiting or tight</option><option value="all">All designs</option></select>
+        <span class="fl">Paper</span><select id="f-src"><option value="">Imported and domestic</option><option value="IMPORT">Imported (China)</option><option value="DOMESTIC">Domestic</option></select>
+        <span class="fl">Search</span><input id="f-q" placeholder="design / code / supplier" size="22">
+      </div>
+      <div class="tbl-wrap" id="dec-wrap"><table class="tbl" id="dec"></table></div>
+      <div class="note"><i class="fa-solid fa-circle-info"></i><span><b>Paper gates the press.</b> A line is only loaded when its decor paper is in stock — one sheet of paper per laminate face — from the stock at the as-of or a PO's ETA. When paper runs short the planner presses other work and comes back to the line when the PO lands; <b>tight</b> means stock and POs in the horizon cover the plan with less than 10% to spare.</span></div>
+    </div>
+  </div>
+  <div class="grid-2-1">
+    <div class="card"><div class="card-head"><i class="fa-solid fa-ship"></i> Open paper purchase orders <span class="right hint" id="pocount"></span></div><div class="card-body"><div class="tbl-wrap" id="po-wrap"><table class="tbl" id="po"></table></div></div></div>
+    <div class="card"><div class="card-head"><i class="fa-solid fa-boxes-stacked"></i> Other materials</div><div class="card-body"><div class="tbl-wrap"><table class="tbl" id="oth"></table></div><div class="note"><i class="fa-solid fa-circle-info"></i><span>Overlay, kraft, resins and consumables are shown with their cover; in this demo they are not a planning constraint — decor paper is, because every design has its own paper and most of it comes from China.</span></div></div></div>
+  </div>
+</main></div>
+<script>window.MER_PAGE='materials'; window.MER_TITLE='Paper & Materials'; window.MER_ICON='fa-scroll';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script><script src="assets/vendor/echarts.min.js"></script><script src="assets/vendor/xlsx.full.min.js"></script>
+<script>
+  var X = window.MERX, R = null, m = null, V = null, sel = null, chart = null, $ = function (id) { return document.getElementById(id); };
+  var ST = X.COLOR.status;
+  function sup(id) { return X.by.suppliers[id] || {}; }
+
+  // one pass over the plan: paper need, waiting lines and the stock trajectory per design
+  function derive(r) {
+    if (r._pap) return r._pap;
+    var T = r.m.asOf, hs = r.hist.state, pos = (r.state.pos || r.m.pos), D = {};
+    X.D.m.papers.forEach(function (p) { D[p.decorId] = { p: p, stock: Math.max(0, (hs.paper || {})[p.decorId] || 0), need: 0, wait: 0, firstWait: null, lines: [], pos: [], inH: 0 }; });
+    r.lines.forEach(function (x) {
+      var s = r.m.skus[x.skuId]; if (!s || !D[s.decorId] || x.status === 'Cancelled') return;
+      var d = D[s.decorId]; d.need += (x.planP + x.rem) * s.faces;
+      if (!x.norm) d.lines.push(x);
+      if (!x.norm && x.paperWait != null && x.paperWait >= T) { d.wait++; if (d.firstWait == null || x.paperWait < d.firstWait) d.firstWait = x.paperWait; }
+    });
+    pos.forEach(function (po) { var d = D[po.decorId]; if (!d || po.eta <= T) return; d.pos.push(po); if (po.eta <= r.m.end) d.inH += po.sheets; });
+    Object.keys(D).forEach(function (k) {
+      var d = D[k]; d.pos.sort(function (a, b) { return a.eta - b.eta; }); d.head = d.stock + d.inH - d.need;
+      d.status = d.wait ? 'wait' : d.need && d.head < d.need * 0.1 ? 'tight' : 'ok';
+    });
+    r._pap = { D: D, pos: pos };
+    return r._pap;
+  }
+  function badge(d) { return d.status === 'wait' ? '<span class="badge b-red">waiting for paper</span>' : d.status === 'tight' ? '<span class="badge b-amber">tight</span>' : '<span class="badge b-green">covered</span>'; }
+  function sw(dec) { var x = X.decor(dec); return '<span class="swatch" style="background:' + x.hex + '" title="shade ' + x.shade + '"></span>'; }
+
+  function render(r) {
+    R = r; m = r.m; V = derive(r);
+    var D = V.D, all = Object.keys(D).map(function (k) { return D[k]; }), T = X.ASOF;
+    var imp = X.D.m.papers.filter(function (p) { return p.source === 'IMPORT'; }).length;
+    var open = V.pos.filter(function (p) { return p.eta > T; }), wk = open.filter(function (p) { return p.eta <= T + 7 * 1440; });
+    var waitD = all.filter(function (d) { return d.status === 'wait'; }), tight = all.filter(function (d) { return d.status === 'tight'; });
+    var wis = X.settings().whatifs.filter(function (w) { return w.type === 'poDelay'; });
+    $('ctx').textContent = X.D.m.papers.length + ' decor papers · ' + open.length + ' open POs · as of ' + X.fmt(T);
+    $('kpis').innerHTML = [
+      ['Imported decor paper', imp + ' of ' + X.D.m.papers.length, 'designs on China paper · 52–64 days by sea', 'blue'],
+      ['Open paper POs', X.n(open.length), X.n(open.reduce(function (a, p) { return a + p.sheets; }, 0)) + ' sheets in transit or confirmed', 'blue'],
+      ['Landing in 7 days', X.n(wk.length), X.n(wk.reduce(function (a, p) { return a + p.sheets; }, 0)) + ' sheets', 'blue'],
+      ['Designs with lines waiting', X.n(waitD.length), X.n(tight.length) + ' more are tight', waitD.length ? 'amber' : 'green'],
+      ['Lines waiting for paper', X.n(R.kpi.paperWait), 'the plan presses other work meanwhile', R.kpi.paperWait ? 'amber' : 'green'],
+      ['Delayed POs (what-if)', X.n(wis.length), wis.length ? wis.map(function (w) { return w.poId + ' +' + w.days + ' d'; }).join(', ') : 'none — run S4 from the dashboard or below', wis.length ? 'red' : 'grey']
+    ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');
+    $('wibar').innerHTML = wis.length ? '<div class="wibar"><i class="fa-solid fa-flask"></i><span>' + wis.map(function (w) { return '<b>' + X.esc(X.whatifLabel(w)) + '</b>'; }).join(' · ') + ' — every page already plans with the later ETA.</span>' + wis.map(function (w) { return '<button class="btn btn-outline btn-sm" data-rmw="' + X.esc(w.id) + '"><i class="fa-solid fa-xmark"></i> Remove</button>'; }).join('') + '</div>' : '';
+    if (!sel || !D[sel]) { var h = X.hashParam(); sel = D[h] ? h : wis.length ? ((X.by.pos[wis[0].poId] || {}).decorId || X.D.scenarios.S4.decorId) : X.D.scenarios.S4.decorId; }
+    detail(); table(); poTable(); others();
+  }
+
+  // ------------------------------------------------------------------ one design: stock projection + its lines
+  function detail() {
+    var d = V.D[sel], p = d.p, s = sup(p.supplierId), dx = X.decor(sel), T = X.ASOF, S4 = X.D.scenarios.S4;
+    $('dtitle').innerHTML = sw(sel) + X.esc(dx.name) + ' <span class="hint mono">' + sel + '</span> — decor paper ' + X.esc(p.id);
+    var next = d.pos[0], wiOn = X.settings().whatifs.filter(function (w) { return w.type === 'poDelay' && next && w.poId === next.id; })[0];
+    $('dact').innerHTML = next ? (wiOn || next.delayed ? '<span class="hint">' + X.esc(next.id) + ' already delayed ' + (next.delayed || wiOn.days) + ' days</span>' : '<button class="btn btn-brand btn-sm" id="delay"><i class="fa-solid fa-hourglass-half"></i> Delay ' + X.esc(next.id) + ' by ' + S4.days + ' days</button>') : '';
+    $('dinfo').innerHTML = '<div class="kv">' +
+      '<div class="k">Supplier</div><div class="v">' + X.esc(s.name || p.supplierId) + ' <span class="hint">' + X.esc((s.country || '') + (s.transit ? ' · ' + s.transit : '')) + '</span></div>' +
+      '<div class="k">Paper</div><div class="v">' + (p.source === 'IMPORT' ? 'imported' : 'domestic') + ' · ' + p.gsm + ' gsm · lead time ' + p.leadDays + ' days · reorder ' + X.n(p.reorderSheets) + ' sheets</div>' +
+      '<div class="k">Stock at as-of</div><div class="v mono">' + X.n(d.stock) + ' sheets</div>' +
+      '<div class="k">Open POs</div><div class="v">' + (d.pos.length ? d.pos.map(function (po) { return '<span class="mono">' + X.esc(po.id) + '</span> ' + X.n(po.sheets) + ' sheets · ETA ' + X.fmtD(po.eta) + (po.delayed ? ' <span class="badge b-red">+' + po.delayed + ' d what-if</span>' : '') + (po.eta > X.END ? ' <span class="hint">(after the horizon)</span>' : ''); }).join('<br>') : '<span class="hint">none</span>') + '</div>' +
+      '<div class="k">The plan needs</div><div class="v mono">' + X.n(d.need) + ' sheets in the next ' + X.D.meta.forwardDays + ' days</div>' +
+      '<div class="k">Status</div><div class="v">' + badge(d) + (d.wait ? ' ' + d.wait + ' line' + (d.wait > 1 ? 's wait' : ' waits') + ' from ' + X.fmt(d.firstWait) : '') + '</div>' +
+      (sel === S4.decorId && !wiOn && !(next && next.delayed) ? '<div class="k">Scenario S4</div><div class="v small">This woodgrain\'s China PO is the anchor of scenario S4: delay it ' + S4.days + ' days and watch which lines wait and which committed dates slip.</div>' : '') + '</div>';
+    proj(d);
+    var rows = d.lines.slice().sort(function (a, b) { return a.due - b.due; });
+    $('dlines').innerHTML = '<thead><tr><th>Line</th><th>Customer</th><th>Class</th><th>SKU</th><th class="num">Qty</th><th class="num">BTP</th><th>Due</th><th>First pressed</th><th>Ready</th><th>Waited for paper from</th><th>Status</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(function (x) { return '<tr><td><a class="mono" href="orders.html#' + X.esc(x.id) + '">' + X.esc(x.id) + '</a></td><td>' + X.esc(X.custName(x.cust)) + '</td><td>' + X.cls(x.cls, x.rush) + '</td><td class="mono small">' + X.esc(x.skuId) + '</td><td class="num mono">' + X.n(x.qty) + '</td><td class="num mono">' + X.n(x.btp) + '</td><td>' + X.fmtD(x.due) + '</td><td>' + (x.firstStart != null ? X.fmt(x.firstStart) : '—') + '</td><td>' + (x.ready != null ? X.fmtD(x.ready) : '—') + '</td><td>' + (x.paperWait != null && x.paperWait >= X.ASOF ? '<span class="deviation">' + X.fmt(x.paperWait) + '</span>' : '<span class="hint">—</span>') + '</td><td>' + X.badge(x.status) + '</td></tr>'; }).join('') : '<tr><td colspan="11" class="hint">No order lines on this design — its paper goes to stock norms only.</td></tr>') + '</tbody>';
+  }
+  function proj(d) {
+    var dec = d.p.decorId, ev = [];
+    R.cycles.forEach(function (c) { var used = 0; c.rows.forEach(function (rw) { rw.pl.forEach(function (q) { var ln = R.byId[q[0]], sk = ln ? ln.skuId : String(q[0]).indexOf('NORM/') === 0 ? String(q[0]).slice(5) : null, s = sk && m.skus[sk]; if (s && s.decorId === dec) used += q[1] * s.faces; }); }); if (used) ev.push([c.start, -used]); });
+    var pos = V.pos.filter(function (p) { return p.decorId === dec; });
+    pos.forEach(function (p) { ev.push([p.eta, p.sheets, p]); });
+    ev.sort(function (a, b) { return a[0] - b[0] || b[1] - a[1]; });
+    var lvl = m.paper0[dec] || 0, data = [[X.dateOf(0).getTime(), lvl]], marks = [];
+    ev.forEach(function (e) { lvl += e[1]; if (e[0] > X.END) return; data.push([X.dateOf(e[0]).getTime(), Math.max(0, lvl)]); if (e[2]) marks.push({ coord: [X.dateOf(e[0]).getTime(), Math.max(0, lvl)], value: e[2].id, itemStyle: { color: ST.good } }); });
+    data.push([X.dateOf(X.END).getTime(), Math.max(0, lvl)]);
+    var orig = pos.filter(function (p) { return p.delayed; }).map(function (p) { return { xAxis: X.dateOf(p.eta - p.delayed * 1440).getTime(), lineStyle: { color: ST.serious, type: 'dashed', width: 1.5 }, label: { formatter: p.id + ' was due', fontSize: 10, color: '#b25f00' } }; });
+    if (!chart) chart = echarts.init($('proj'));
+    chart.setOption({
+      animation: false, grid: { left: 52, right: 16, top: 26, bottom: 28 },
+      tooltip: { trigger: 'axis', formatter: function (ps) { var q = ps[0]; return X.fmt(Math.round((q.value[0] - X.dateOf(0).getTime()) / 60000)) + '<br>' + X.n(q.value[1]) + ' sheets in stock'; } },
+      xAxis: { type: 'time', min: X.dateOf(0).getTime(), max: X.dateOf(X.END).getTime(), axisLabel: { fontSize: 10, color: '#8a93a0', formatter: function (v) { var dd = new Date(v); return dd.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dd.getMonth()]; } }, splitLine: { show: false }, axisLine: { lineStyle: { color: '#d5dbe0' } } },
+      yAxis: { type: 'value', min: 0, axisLabel: { fontSize: 10, color: '#8a93a0', formatter: function (v) { return v >= 1000 ? v / 1000 + 'k' : v; } }, splitLine: { lineStyle: { color: '#eef1f4' } } },
+      series: [{ type: 'line', step: 'end', showSymbol: false, data: data, lineStyle: { width: 2, color: X.COLOR.accent }, areaStyle: { color: 'rgba(42,120,214,0.08)' },
+        markPoint: { symbol: 'pin', symbolSize: 26, label: { show: false }, data: marks, tooltip: { formatter: function (p) { return 'PO ' + p.value + ' received'; } } },
+        markLine: { symbol: 'none', silent: true, data: [{ xAxis: X.dateOf(X.ASOF).getTime(), lineStyle: { color: X.COLOR.ink, width: 1, type: 'solid' }, label: { formatter: 'as-of', fontSize: 10, color: X.COLOR.ink } }].concat(orig) } }]
+    }, true);
+  }
+
+  // ------------------------------------------------------------------ design table
+  function table() {
+    var show = $('f-show').value, src = $('f-src').value, q = $('f-q').value.trim().toLowerCase(), D = V.D;
+    var rows = Object.keys(D).map(function (k) { return D[k]; }).filter(function (d) {
+      if (show === 'wait' && d.status !== 'wait') return false; if (show === 'risk' && d.status === 'ok') return false;
+      if (src && d.p.source !== src) return false;
+      if (q && (d.p.decorId + ' ' + X.decor(d.p.decorId).name + ' ' + (sup(d.p.supplierId).name || '')).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    }).sort(function (a, b) { return (a.status === 'wait' ? 0 : a.status === 'tight' ? 1 : 2) - (b.status === 'wait' ? 0 : b.status === 'tight' ? 1 : 2) || (a.firstWait || 1e12) - (b.firstWait || 1e12) || a.head - b.head; });
+    $('dcount').textContent = rows.length + ' of ' + Object.keys(D).length + ' designs';
+    var CAP = 300;
+    $('dec').innerHTML = '<thead><tr><th>Design</th><th>Paper</th><th class="num">Lead</th><th class="num">Stock at as-of</th><th>Next PO</th><th class="num">POs in horizon</th><th class="num">Plan needs</th><th class="num">Spare</th><th class="num">Lines waiting</th><th>First wait</th><th>Status</th></tr></thead><tbody>' +
+      rows.slice(0, CAP).map(function (d) { var n = d.pos[0], s = sup(d.p.supplierId);
+        return '<tr data-dec="' + d.p.decorId + '" style="cursor:pointer"' + (d.p.decorId === sel ? ' class="sel"' : '') + '><td>' + sw(d.p.decorId) + X.esc(X.decor(d.p.decorId).name) + ' <span class="hint mono">' + d.p.decorId + '</span></td><td class="small">' + (d.p.source === 'IMPORT' ? 'China · ' : 'India · ') + X.esc(s.name || '') + '</td><td class="num mono">' + d.p.leadDays + ' d</td><td class="num mono">' + X.n(d.stock) + '</td>' +
+          '<td class="small">' + (n ? '<span class="mono">' + X.esc(n.id) + '</span> · ' + X.fmtD(n.eta) + (n.delayed ? ' <span class="badge b-red">+' + n.delayed + ' d</span>' : '') : '<span class="hint">—</span>') + '</td><td class="num mono">' + X.n(d.inH) + '</td><td class="num mono">' + X.n(d.need) + '</td><td class="num mono ' + (d.head < 0 ? 'deviation' : '') + '">' + X.n(d.head) + '</td>' +
+          '<td class="num mono">' + (d.wait || '<span class="hint">—</span>') + '</td><td>' + (d.firstWait != null ? X.fmt(d.firstWait) : '<span class="hint">—</span>') + '</td><td>' + badge(d) + '</td></tr>'; }).join('') +
+      (rows.length > CAP ? '<tr><td colspan="11" class="hint">… ' + (rows.length - CAP) + ' more — use the search</td></tr>' : '') + (rows.length ? '' : '<tr><td colspan="11" class="hint">No designs match.</td></tr>') + '</tbody>';
+  }
+
+  // ------------------------------------------------------------------ POs + other materials
+  function poTable() {
+    var T = X.ASOF, rows = V.pos.filter(function (p) { return p.eta > T; }).sort(function (a, b) { return a.eta - b.eta; }), CAP = 250;
+    $('pocount').textContent = rows.length + ' open · earliest first';
+    $('po').innerHTML = '<thead><tr><th>PO</th><th>Design</th><th>Supplier</th><th class="num">Sheets</th><th>ETA</th><th>Status</th></tr></thead><tbody>' +
+      rows.slice(0, CAP).map(function (p) { var s = sup(p.supplierId), raw = X.by.pos[p.id] || {}; return '<tr data-dec="' + p.decorId + '" style="cursor:pointer"><td class="mono">' + X.esc(p.id) + '</td><td>' + sw(p.decorId) + X.esc(X.decor(p.decorId).name) + '</td><td class="small">' + X.esc(s.name || p.supplierId) + '</td><td class="num mono">' + X.n(p.sheets) + '</td><td>' + X.fmt(p.eta) + (p.delayed ? ' <span class="badge b-red">+' + p.delayed + ' d what-if</span>' : '') + '</td><td>' + X.esc(raw.status || '') + '</td></tr>'; }).join('') +
+      (rows.length > CAP ? '<tr><td colspan="6" class="hint">… ' + (rows.length - CAP) + ' more later POs (Excel has them all)</td></tr>' : '') + '</tbody>';
+  }
+  function others() {
+    $('oth').innerHTML = '<thead><tr><th>Material</th><th class="num">Stock · use a day</th><th class="num">Cover</th></tr></thead><tbody>' +
+      X.D.m.materials.map(function (x) { return '<tr><td style="white-space:normal">' + X.esc(x.name) + '<div class="hint small">' + X.esc(x.kind + ' · ' + (sup(x.supplierId).name || '')) + '</div></td><td class="num mono">' + X.n(x.stock) + ' ' + X.esc(x.uom) + '<div class="hint small">' + X.n(x.usePerDay) + ' a day</div></td><td class="num mono ' + (x.coverDays < 15 ? 'deviation' : '') + '">' + x.coverDays + ' d</td></tr>'; }).join('') + '</tbody>';
+  }
+
+  // ------------------------------------------------------------------ events
+  ['f-show', 'f-src'].forEach(function (id) { $(id).addEventListener('change', table); });
+  $('f-q').addEventListener('input', table);
+  function pick(e) { var tr = e.target.closest('[data-dec]'); if (!tr) return; sel = tr.getAttribute('data-dec'); detail(); table(); $('dtitle').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  $('dec').addEventListener('click', pick); $('po').addEventListener('click', pick);
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'delay') { var n = V.D[sel].pos[0], S4 = X.D.scenarios.S4; X.replan(function () { X.addWhatif({ type: 'poDelay', poId: n.id, days: S4.days }); }, 'Re-planning with ' + n.id + ' ' + S4.days + ' days late', function (r) { render(r); X.toast(n.id + ' is ' + S4.days + ' days late in the live plan — every page follows'); }); }
+    else if (b.getAttribute('data-rmw')) { var id = b.getAttribute('data-rmw'); X.replan(function () { X.removeWhatif(id); }, 'Re-planning', render); }
+  });
+  $('xl').addEventListener('click', function () {
+    var D = V.D;
+    X.xlsx([
+      { name: 'Decor paper', cols: ['Design', 'Name', 'Paper', 'Source', 'Supplier', 'Lead days', 'Stock at as-of', 'Next PO', 'Next ETA', 'POs in horizon', 'Plan needs', 'Spare', 'Lines waiting', 'First wait', 'Status'],
+        rows: Object.keys(D).map(function (k) { var d = D[k], n = d.pos[0]; return [k, X.decor(k).name, d.p.id, d.p.source, sup(d.p.supplierId).name || '', d.p.leadDays, d.stock, n ? n.id : '', n ? X.fmt(n.eta) : '', d.inH, d.need, d.head, d.wait, d.firstWait != null ? X.fmt(d.firstWait) : '', d.status]; }),
+        widths: [8, 22, 10, 10, 28, 9, 13, 13, 18, 13, 11, 9, 12, 18, 9] },
+      { name: 'Open POs', cols: ['PO', 'Design', 'Supplier', 'Sheets', 'ETA', 'Delayed days (what-if)', 'Status'],
+        rows: V.pos.filter(function (p) { return p.eta > X.ASOF; }).map(function (p) { return [p.id, p.decorId, sup(p.supplierId).name || p.supplierId, p.sheets, X.fmt(p.eta), p.delayed || '', (X.by.pos[p.id] || {}).status || '']; }),
+        widths: [12, 8, 28, 9, 18, 12, 12] }
+    ], 'Merino_Paper_' + X.yymmdd(X.ASOF) + '.xlsx');
+  });
+  window.addEventListener('resize', function () { if (chart) chart.resize(); });
+  window.addEventListener('mer:activated', function () { if (chart) chart.resize(); });
+  window.addEventListener('hashchange', function () { var h = X.hashParam(); if (V && V.D[h]) { sel = h; detail(); table(); } });
+  X.withPlan(render);
+  X.whenPlanChanges(render);
+</script>
+</body>
+</html>

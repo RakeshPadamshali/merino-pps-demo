@@ -1,0 +1,1 @@
+window.MER_META = {"asOf": "2026-09-22T10:30:00", "asOfLabel": "Tue 22 Sep 2026 10:30", "shift": "A", "presets": {"today": "Merino today (fixed sequence)", "balanced": "Balanced (recommended)", "otif": "OTIF first", "utilisation": "Utilisation first"}};

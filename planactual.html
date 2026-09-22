@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plan vs Actual · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  table.heat td.h { text-align:center; font-variant-numeric:tabular-nums; font-size:11px; min-width:50px; padding:4px 3px; }
+  table.heat td.h span { display:block; border-radius:4px; padding:3px 2px; }
+  table.heat th.d { text-align:center; font-size:10px; }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--color-text-muted); margin-top:8px; align-items:center; }
+  .legend i.sw { display:inline-block; width:14px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  #ev-wrap { max-height:380px; }
+  .tlink { font-size:11px; cursor:pointer; color:var(--color-primary); }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Plan vs Actual — the last <span id="hd">14</span> days, press by press</h1><div class="crumb">Execution &amp; Trace › Plan vs Actual › <span id="ctx"></span></div></div>
+    <div class="actions"><button class="btn btn-outline btn-sm" id="xl"><i class="fa-solid fa-file-excel"></i> Excel</button></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid-2-1">
+    <div class="card"><div class="card-head"><i class="fa-solid fa-chart-column"></i> Sheets a day — planned at standard time, made, and lost <span class="right"><span class="tlink" id="ttog">Show as table</span></span></div><div class="card-body"><div id="chart" style="height:280px"></div><div id="daytbl" class="tbl-wrap" style="display:none;max-height:280px"></div></div></div>
+    <div class="card"><div class="card-head"><i class="fa-solid fa-circle-info"></i> How plan and actual are compared</div><div class="card-body small" style="line-height:1.55">
+      <p style="margin:0 0 8px"><b>Actual</b> is what the presses did — every cycle, its load, mould sets and print marks — with the breakdowns, cycle overruns and QC downgrades that happened.</p>
+      <p style="margin:0 0 8px"><b>Plan</b> is the same loads at <b>standard cycle time</b>: the sheets each press would have made that day with no breakdown, no overrun and no downgrade (each press's own sheets per standard minute that day × the minutes lost, plus the sheets downgraded).</p>
+      <p style="margin:0 0 8px">So every sheet of the gap has a recorded reason. Changeover time is planned, not a loss — it is where the <a href="objectives.html">Objective Studio</a> and the <a href="sequence.html">Colour &amp; Changeover</a> page win time back.</p>
+      <p style="margin:0">In production the actuals come from press confirmations (PLC cycle counters and shift reports); here they are generated with the dataset.</p>
+    </div></div>
+  </div>
+  <div class="card"><div class="card-head"><i class="fa-solid fa-table-cells"></i> Output attainment by press and day — good sheets ÷ planned sheets <span class="right hint">click a cell for its disturbances</span></div><div class="card-body"><div class="tbl-wrap"><table class="tbl heat" id="heat"></table></div>
+    <div class="legend"><span><i class="sw" style="background:#0ca30c"></i>≥ 98%</span><span><i class="sw" style="background:#fab219"></i>90 – 98%</span><span><i class="sw" style="background:#ec835a"></i>75 – 90%</span><span><i class="sw" style="background:#d03b3b"></i>&lt; 75%</span><span><i class="fa-solid fa-bolt" style="color:#d03b3b;margin-right:4px"></i>breakdown</span><span><i class="fa-solid fa-clock" style="color:#b25f00;margin-right:4px"></i>cycle overruns</span><span><i class="fa-solid fa-circle-half-stroke" style="color:#5e35b1;margin-right:4px"></i>QC downgrade</span></div></div></div>
+  <div class="grid-2-1">
+    <div class="card"><div class="card-head"><i class="fa-solid fa-list"></i> Disturbances <span class="right"><select id="f-ev" style="font:12px 'Roboto';padding:3px 6px;border:1px solid var(--color-border);border-radius:5px"><option value="">All</option><option value="bd">Breakdowns</option><option value="ov">Cycle overruns</option><option value="qc">QC downgrades</option></select></span></div><div class="card-body"><div class="filters" id="evfilter" style="margin-bottom:6px"></div><div class="tbl-wrap" id="ev-wrap"><table class="tbl" id="ev"></table></div></div></div>
+    <div>
+      <div class="card"><div class="card-head"><i class="fa-solid fa-truck-fast"></i> Committed lines due in these days</div><div class="card-body" id="otif"></div></div>
+      <div class="card"><div class="card-head"><i class="fa-solid fa-arrows-rotate"></i> Changeover time a day — as run on the fixed sequence</div><div class="card-body"><div id="chg" style="height:170px"></div></div></div>
+    </div>
+  </div>
+</main></div>
+<script>window.MER_PAGE='planactual'; window.MER_TITLE='Plan vs Actual'; window.MER_ICON='fa-scale-balanced';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script><script src="assets/vendor/echarts.min.js"></script><script src="assets/vendor/xlsx.full.min.js"></script>
+<script>
+  var X = window.MERX, m = null, H = null, G = null, chart = null, chg = null, cell = null, $ = function (id) { return document.getElementById(id); };
+  var ST = X.COLOR.status, ND = X.D.meta.historyDays;
+  function days() { var n = Math.ceil(X.ASOF / 1440), out = []; for (var d = 0; d < n; d++) out.push(d); return out; }   // history day d = [d*1440, (d+1)*1440), the as-of day partial
+
+  // per press and day: what was made, what was lost and why; planned = made + lost at that press-day's sheets per standard minute
+  function derive() {
+    var g = {}, T = X.ASOF;
+    m.presses.forEach(function (p) { days().forEach(function (d) { g[p.id + '|' + d] = { p: p.id, d: d, cyc: 0, sheets: 0, std: 0, over: 0, ovN: 0, qc: 0, qcN: 0, bd: 0, chg: 0, swaps: 0 }; }); });
+    H.cycles.forEach(function (c) {
+      if (c.s0 >= T) return;
+      var x = g[c.p + '|' + Math.floor(c.s0 / 1440)]; if (!x) return;
+      x.cyc++; x.sheets += c.sheets; x.std += m.bandById[c.band].eff; x.chg += c.chg; x.swaps += c.swaps;
+      if (c.over) { x.over += c.over; x.ovN++; }
+      (c.qc || []).forEach(function (q) { x.qc += q.sheets; x.qcN++; });
+    });
+    m.breakdowns.forEach(function (b) {   // breakdown minutes, clipped to each day they touch
+      for (var d = Math.floor(b.s / 1440); d * 1440 < Math.min(b.e, T); d++) { var x = g[b.press + '|' + d]; if (x) x.bd += Math.min(b.e, (d + 1) * 1440, T) - Math.max(b.s, d * 1440); }
+    });
+    var avg = {}; m.presses.forEach(function (p) { var s = 0, t = 0; Object.keys(g).forEach(function (k) { if (g[k].p === p.id) { s += g[k].sheets; t += g[k].std; } }); avg[p.id] = t ? s / t : 0; });
+    Object.keys(g).forEach(function (k) {
+      var x = g[k], rate = x.std >= 240 ? x.sheets / x.std : avg[x.p];
+      x.lostBd = Math.round(x.bd * rate); x.lostOv = Math.round(x.over * rate); x.good = x.sheets - x.qc;
+      x.plan = x.sheets + x.lostBd + x.lostOv; x.att = x.plan ? x.good / x.plan : 1;
+    });
+    return g;
+  }
+  function sum(f, pred) { return Object.keys(G).reduce(function (a, k) { return a + (!pred || pred(G[k]) ? f(G[k]) : 0); }, 0); }
+  function ontime() {   // committed lines due before the as-of: on time if made (after finishing) by their due date
+    var out = { due: 0, ok: 0, late: [] }, fin = m.finishDays * 1440;
+    Object.keys(H.state.lines).forEach(function (id) {
+      var L = H.state.lines[id], l = L.l; if (l.norm || (l.cls !== 'EXPORT' && l.cls !== 'DOM_COMMITTED') || l.due >= X.ASOF || l.due < 0) return;
+      if (L.cancelled > 0 && L.rem <= 0 && L.planH <= L.down) return;
+      out.due++;
+      var ready = L.rem <= 0 ? (L.lastEnd != null ? L.lastEnd + fin : l.rel) : null;
+      if (ready != null && ready <= l.due) out.ok++; else out.late.push({ l: l, L: L, ready: ready });
+    });
+    return out;
+  }
+  function render() {
+    if (!m) m = X.E.prepare(X.D, {});   // history is always on the base masters (uploads only change the live plan)
+    X.withPlan(function (r) { H = r.hist; G = derive(); draw(); });
+  }
+  function draw() {
+    var plan = sum(function (x) { return x.plan; }), good = sum(function (x) { return x.good; }), made = sum(function (x) { return x.sheets; });
+    var lb = sum(function (x) { return x.lostBd; }), lo = sum(function (x) { return x.lostOv; }), qc = sum(function (x) { return x.qc; });
+    var bdMin = sum(function (x) { return x.bd; }), ovMin = sum(function (x) { return x.over; }), ovN = sum(function (x) { return x.ovN; }), qcN = sum(function (x) { return x.qcN; });
+    var bds = m.breakdowns.filter(function (b) { return b.s < X.ASOF; }), oa = ontime();
+    $('hd').textContent = ND;
+    $('ctx').textContent = X.fmtD(0) + ' – ' + X.fmt(X.ASOF) + ' · ' + X.n(sum(function (x) { return x.cyc; })) + ' press cycles on the fixed sequence';
+    $('kpis').innerHTML = [
+      ['Output attainment', X.pct(plan ? good / plan : 1, 1), X.n(good) + ' good sheets of ' + X.n(plan) + ' planned', good / plan >= 0.98 ? 'green' : 'amber'],
+      ['Lost to breakdowns', X.n(lb) + ' sheets', X.dur(bdMin) + ' down · ' + bds.map(function (b) { return b.press; }).join(', '), lb ? 'red' : 'green'],
+      ['Lost to cycle overruns', X.n(lo) + ' sheets', ovN + ' cycles ran long · ' + X.dur(ovMin), lo ? 'amber' : 'green'],
+      ['QC downgrades', X.n(qc) + ' sheets', qcN + ' daylights · ' + X.pct(made ? qc / made : 0, 1) + ' of output — balance-to-produce grew back', qc ? 'amber' : 'green'],
+      ['Committed OTIF', X.pct(oa.due ? oa.ok / oa.due : 1, 1), oa.ok + ' of ' + oa.due + ' lines due in these days on time', oa.ok / oa.due >= 0.95 ? 'green' : 'amber'],
+      ['Changeover time', X.n(Math.round(sum(function (x) { return x.chg; }) / 60)) + ' h', X.n(sum(function (x) { return x.swaps; })) + ' plate swaps on the fixed sequence', 'grey']
+    ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');
+    dayChart(); heat(); events(); otif(oa); chgChart();
+  }
+  function perDay(f) { return days().map(function (d) { return m.presses.reduce(function (a, p) { return a + f(G[p.id + '|' + d]); }, 0); }); }
+  function dayChart() {
+    var ds = days(), good = perDay(function (x) { return x.good; }), qc = perDay(function (x) { return x.qc; }), ov = perDay(function (x) { return x.lostOv; }), bd = perDay(function (x) { return x.lostBd; });
+    if (!chart) chart = echarts.init($('chart'));
+    var S = [['Good sheets', good, X.COLOR.accent], ['QC downgraded', qc, '#9aa2ad'], ['Lost to overruns', ov, ST.warning], ['Lost to breakdowns', bd, ST.critical]];
+    chart.setOption({
+      animation: false, grid: { left: 52, right: 12, top: 30, bottom: 26 },
+      legend: { top: 0, left: 0, itemWidth: 12, itemHeight: 10, textStyle: { fontSize: 11, color: '#546e7a' } },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: function (v) { return X.n(v) + ' sheets'; } },
+      xAxis: { type: 'category', data: ds.map(function (d) { return X.fmtDM(d * 1440); }), axisLabel: { fontSize: 10, color: '#8a93a0' }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#d5dbe0' } } },
+      yAxis: { type: 'value', axisLabel: { fontSize: 10, color: '#8a93a0', formatter: function (v) { return v >= 1000 ? v / 1000 + 'k' : v; } }, splitLine: { lineStyle: { color: '#eef1f4' } } },
+      series: S.map(function (s, i) { return { name: s[0], type: 'bar', stack: 'p', barWidth: '58%', data: s[1], itemStyle: { color: s[2], borderColor: '#fff', borderWidth: 1, borderRadius: i === S.length - 1 ? [3, 3, 0, 0] : 0 } }; })
+    }, true);
+    $('daytbl').innerHTML = '<table class="tbl"><thead><tr><th>Day</th><th class="num">Planned</th><th class="num">Good</th><th class="num">QC</th><th class="num">Overruns</th><th class="num">Breakdowns</th><th class="num">Attainment</th></tr></thead><tbody>' +
+      ds.map(function (d, i) { var pl = good[i] + qc[i] + ov[i] + bd[i]; return '<tr><td>' + X.fmtD(d * 1440) + '</td><td class="num mono">' + X.n(pl) + '</td><td class="num mono">' + X.n(good[i]) + '</td><td class="num mono">' + X.n(qc[i]) + '</td><td class="num mono">' + X.n(ov[i]) + '</td><td class="num mono">' + X.n(bd[i]) + '</td><td class="num mono">' + X.pct(pl ? good[i] / pl : 1, 1) + '</td></tr>'; }).join('') + '</tbody></table>';
+  }
+  function col(a) { return a >= 0.98 ? ST.good : a >= 0.9 ? ST.warning : a >= 0.75 ? ST.serious : ST.critical; }
+  function heat() {
+    var ds = days();
+    $('heat').innerHTML = '<thead><tr><th>Press</th>' + ds.map(function (d) { return '<th class="d">' + X.fmtD(d * 1440).replace(' ', '<br>') + '</th>'; }).join('') + '<th class="num">Total</th></tr></thead><tbody>' +
+      m.presses.map(function (p) {
+        var tp = 0, tg = 0;
+        return '<tr><td class="strong">' + X.esc(p.name) + '</td>' + ds.map(function (d) {
+          var x = G[p.id + '|' + d]; tp += x.plan; tg += x.good; var c = col(x.att);
+          var icon = x.bd ? ' <i class="fa-solid fa-bolt"></i>' : x.ovN ? ' <i class="fa-solid fa-clock" style="opacity:.8"></i>' : x.qcN ? ' <i class="fa-solid fa-circle-half-stroke" style="opacity:.8"></i>' : '';
+          return '<td class="h" data-cell="' + p.id + '|' + d + '" style="cursor:pointer" title="' + X.esc(p.name + ' · ' + X.fmtD(d * 1440) + ': ' + X.n(x.good) + ' good of ' + X.n(x.plan) + ' planned' + (x.bd ? ' · breakdown ' + X.dur(x.bd) : '') + (x.over ? ' · overruns ' + x.over + ' min' : '') + (x.qc ? ' · ' + x.qc + ' sheets downgraded' : '')) + '"><span style="background:' + c + ';color:' + X.textOn(c) + '">' + (x.att >= 0.9995 ? '100' : (x.att * 100).toFixed(1)) + '%' + icon + '</span></td>';
+        }).join('') + '<td class="num mono strong">' + X.pct(tp ? tg / tp : 1, 1) + '</td></tr>';
+      }).join('') + '</tbody>';
+  }
+  function evRows() {
+    var out = [], T = X.ASOF;
+    m.breakdowns.forEach(function (b) { if (b.s < T) out.push({ t: b.s, p: b.press, kind: 'bd', what: X.esc(b.id + ' · ' + b.category + ' — ' + b.reason), qty: X.dur(Math.min(b.e, T) - b.s) + ' down' }); });
+    H.cycles.forEach(function (c) {
+      if (c.s0 >= T) return;
+      if (c.over) out.push({ t: c.s0, p: c.p, kind: 'ov', what: 'cycle <a class="mono" href="loadbuilder.html#' + c.id + '">' + c.id + '</a> ran ' + c.over + ' min over its standard ' + m.bandById[c.band].eff + ' min', qty: c.over + ' min' });
+      (c.qc || []).forEach(function (q) { out.push({ t: c.end, p: c.p, kind: 'qc', what: '<a class="mono" href="loadbuilder.html#' + c.id + '">' + c.id + '</a> daylight ' + (q.row + 1) + ' · ' + X.esc(q.defect) + ' · line <a class="mono" href="orders.html#' + X.esc(q.lineId) + '">' + X.esc(q.lineId) + '</a>', qty: X.n(q.sheets) + ' sheets to B-grade' }); });
+    });
+    return out.sort(function (a, b) { return a.t - b.t; });
+  }
+  function events() {
+    var f = $('f-ev').value, rows = evRows().filter(function (e) { return (!f || e.kind === f) && (!cell || (e.p === cell[0] && Math.floor(e.t / 1440) === cell[1])); });
+    $('evfilter').innerHTML = cell ? '<span class="chip">' + X.esc(m.pressById[cell[0]].name + ' · ' + X.fmtD(cell[1] * 1440)) + '</span> <span class="tlink" id="clr">show every day</span>' : '<span class="hint">' + rows.length + ' disturbances in ' + ND + ' days</span>';
+    var K = { bd: '<span class="badge b-red">breakdown</span>', ov: '<span class="badge b-amber">overrun</span>', qc: '<span class="badge b-purple">QC downgrade</span>' };
+    $('ev').innerHTML = '<thead><tr><th>When</th><th>Press</th><th>Type</th><th>What happened</th><th class="num">Impact</th></tr></thead><tbody>' +
+      (rows.length ? rows.slice(0, 300).map(function (e) { return '<tr><td class="mono">' + X.fmt(e.t) + '</td><td>' + e.p + '</td><td>' + K[e.kind] + '</td><td style="white-space:normal">' + e.what + '</td><td class="num mono">' + e.qty + '</td></tr>'; }).join('') : '<tr><td colspan="5" class="hint">No disturbances on this press that day — it made its plan.</td></tr>') + '</tbody>';
+  }
+  function otif(oa) {
+    var late = oa.late.sort(function (a, b) { return a.l.due - b.l.due; });
+    $('otif').innerHTML = '<div class="kv"><div class="k">Due in these days</div><div class="v">' + oa.due + ' committed lines (export and committed domestic)</div>' +
+      '<div class="k">On time</div><div class="v"><b>' + oa.ok + '</b> (' + X.pct(oa.due ? oa.ok / oa.due : 1, 1) + ')</div><div class="k">Late or not yet made</div><div class="v">' + late.length + '</div></div>' +
+      '<div class="tbl-wrap" style="max-height:170px;margin-top:6px"><table class="tbl"><tbody>' +
+      late.slice(0, 60).map(function (x) { return '<tr><td><a class="mono" href="orders.html#' + X.esc(x.l.id) + '">' + X.esc(x.l.id) + '</a></td><td>' + X.cls(x.l.cls) + '</td><td>due ' + X.fmtD(x.l.due) + '</td><td>' + (x.ready != null ? 'ready ' + X.fmtD(x.ready) : '<span class="deviation">not yet made</span>') + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+      '<div class="note"><i class="fa-solid fa-circle-info"></i><span>These days ran on Merino\'s fixed sequence; the lines still open are the starting point the live plan inherits — see the <a href="orders.html#late">Order Book</a>.</span></div>';
+  }
+  function chgChart() {
+    var ds = days(), h = perDay(function (x) { return x.chg; }).map(function (v) { return Math.round(v / 6) / 10; });
+    if (!chg) chg = echarts.init($('chg'));
+    chg.setOption({ animation: false, grid: { left: 40, right: 8, top: 10, bottom: 24 },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: function (v) { return v + ' h of changeover (all presses)'; } },
+      xAxis: { type: 'category', data: ds.map(function (d) { return X.fmtDM(d * 1440); }), axisLabel: { fontSize: 9, color: '#8a93a0' }, axisTick: { show: false } },
+      yAxis: { type: 'value', axisLabel: { fontSize: 10, color: '#8a93a0', formatter: '{value} h' }, splitLine: { lineStyle: { color: '#eef1f4' } } },
+      series: [{ type: 'bar', data: h, barWidth: '55%', itemStyle: { color: '#86b6ef', borderRadius: [3, 3, 0, 0] } }] }, true);
+  }
+  $('f-ev').addEventListener('change', events);
+  $('heat').addEventListener('click', function (e) { var td = e.target.closest('[data-cell]'); if (!td) return; var k = td.getAttribute('data-cell').split('|'); cell = [k[0], +k[1]]; events(); });
+  $('evfilter').addEventListener('click', function (e) { if (e.target.id === 'clr') { cell = null; events(); } });
+  $('ttog').addEventListener('click', function () { var t = $('daytbl').style.display === 'none'; $('daytbl').style.display = t ? '' : 'none'; $('chart').style.display = t ? 'none' : ''; this.textContent = t ? 'Show as chart' : 'Show as table'; if (!t && chart) chart.resize(); });
+  $('xl').addEventListener('click', function () {
+    var rows = [];
+    m.presses.forEach(function (p) { days().forEach(function (d) { var x = G[p.id + '|' + d]; rows.push([p.name, X.fmtD(d * 1440), x.cyc, x.plan, x.sheets, x.good, x.qc, x.lostOv, x.lostBd, Math.round(x.att * 1000) / 10, x.bd, x.over, Math.round(x.chg)]); }); });
+    X.xlsx([{ name: 'Plan vs actual', cols: ['Press', 'Day', 'Cycles', 'Planned sheets', 'Sheets pressed', 'Good sheets', 'QC downgraded', 'Lost to overruns', 'Lost to breakdowns', 'Attainment %', 'Breakdown min', 'Overrun min', 'Changeover min'], rows: rows, widths: [9, 12, 8, 14, 14, 12, 14, 16, 18, 13, 14, 12, 15] },
+            { name: 'Disturbances', cols: ['When', 'Press', 'Type', 'What', 'Impact'], rows: evRows().map(function (e) { return [X.fmt(e.t), e.p, e.kind === 'bd' ? 'Breakdown' : e.kind === 'ov' ? 'Overrun' : 'QC downgrade', e.what.replace(/<[^>]+>/g, ''), e.qty]; }), widths: [18, 7, 14, 70, 20] }],
+      'Merino_Plan_vs_Actual_' + X.yymmdd(X.ASOF) + '.xlsx');
+  });
+  window.addEventListener('resize', function () { if (chart) chart.resize(); if (chg) chg.resize(); });
+  window.addEventListener('mer:activated', function () { if (chart) chart.resize(); if (chg) chg.resize(); });
+  render();
+  X.whenPlanChanges(render);   // what-ifs and weights change the live plan only — the history stays as it was
+</script>
+</body>
+</html>

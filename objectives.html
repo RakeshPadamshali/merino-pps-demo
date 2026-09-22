@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Objective Studio · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .presets { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:12px; }
+  .pr { background:#fff; border:1px solid var(--color-border); border-radius:8px; padding:10px 12px; cursor:pointer; display:flex; flex-direction:column; gap:4px; }
+  .pr:hover { border-color:var(--color-primary); } .pr.live { box-shadow:0 0 0 2px var(--color-primary) inset; border-color:var(--color-primary); }
+  .pr .t { font-weight:600; display:flex; gap:6px; align-items:center; } .pr .d { font-size:11.5px; color:var(--color-text-secondary); line-height:1.4; }
+  .pr .w { font-size:10.5px; color:var(--color-text-hint); font-variant-numeric:tabular-nums; }
+  table.cmp td.bar { min-width:112px; } table.cmp td, table.cmp th { padding-left:8px; padding-right:8px; } table.cmp .cb { display:flex; align-items:center; gap:6px; } table.cmp .cb i { display:block; height:8px; border-radius:4px; background:#86b6ef; }
+  table.cmp td.best .cb i { background:#1f6fb2; } table.cmp td.best .cb span { font-weight:700; }
+  table.cmp th.live { color:var(--color-primary-dark); } table.cmp .grp td { background:#fafbfc; font:600 10px 'Roboto'; text-transform:uppercase; letter-spacing:.3px; color:var(--color-text-muted); }
+  .obj { display:grid; grid-template-columns:24px 1fr; gap:8px; align-items:start; margin-bottom:8px; font-size:12px; } .obj .nb { background:var(--color-primary-light); color:var(--color-primary-dark); border-radius:5px; text-align:center; font-weight:700; font-size:11px; padding:2px 0; }
+  svg.sc text { font:11px 'Roboto'; fill:#4a5563; } svg.sc .ax { stroke:#c9ced4; } svg.sc .gl { stroke:#eef0f2; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Objective Studio — five competing objectives, one plan</h1><div class="crumb">Planning › Objective Studio › <span id="ctx"></span></div></div>
+    <div class="actions"><span class="hint" id="liveinfo"></span></div>
+  </div>
+  <div class="presets" id="presets"></div>
+  <div class="grid-2-1">
+    <div class="card">
+      <div class="card-head"><i class="fa-solid fa-scale-balanced"></i> Plan outcomes, side by side <span class="right hint" id="cmpmeta"></span></div>
+      <div class="card-body"><div class="tbl-wrap"><table class="tbl cmp" id="cmp"></table></div>
+        <div class="note"><i class="fa-solid fa-circle-info"></i><span>Each column is the same order book, the same presses, moulds, paper and history, re-planned from the plant as it stands at the as-of moment — only the way priorities are set differs. The darker bar is the best value in its row. <b>Merino today</b> solves the objectives one after the other (export first, then committed domestic by date, then stock norms; changeovers and thickness only break ties); the weighted plans solve all five at once.</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="card"><div class="card-head"><i class="fa-solid fa-sliders"></i> Custom weights <span class="right hint">0 – 100</span></div><div class="card-body" id="sliders"></div></div>
+      <div class="card"><div class="card-head"><i class="fa-solid fa-chart-line"></i> Trade-off: delivery vs changeover time</div><div class="card-body"><div id="scatter"></div><div class="hint small">Up is better delivery, left is less time lost to plate swaps and cure-band changes.</div></div></div>
+    </div>
+  </div>
+  <div class="card"><div class="card-head"><i class="fa-solid fa-list-ol"></i> The five objectives (as set out with Merino)</div><div class="card-body grid2" id="objs"></div></div>
+</main></div>
+<script>window.MER_PAGE='objectives'; window.MER_TITLE='Objective Studio'; window.MER_ICON='fa-sliders';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script>
+<script>
+  var X = window.MERX, P = X.D.m.weights, OBJ = X.D.m.objectives, results = {}, custom = null;
+  var cw = (X.settings().preset === 'custom' && X.settings().weights) || { mode: 'weighted', profit: 20, dates: 50, norms: 10, changeover: 12, mix: 8, delayScale: 1.2 };
+  function stFor(id) { var s = X.settings(); return id === 'custom' ? { preset: 'custom', weights: cw, whatifs: s.whatifs } : { preset: id, weights: null, whatifs: s.whatifs }; }
+  function wtext(w) { return w.mode === 'sequence' ? 'fixed sequence' : 'profit ' + w.profit + ' · dates ' + w.dates + ' · norms ' + w.norms + ' · changeover ' + w.changeover + ' · mix ' + w.mix + ' · delay ×' + w.delayScale; }
+  function drawPresets() {
+    var live = X.settings().preset;
+    document.getElementById('presets').innerHTML = P.map(function (w) {
+      return '<div class="pr' + (w.id === live ? ' live' : '') + '" data-p="' + w.id + '"><div class="t">' + (w.id === 'today' ? '<i class="fa-solid fa-list-ol" style="color:#8a93a0"></i>' : '<i class="fa-solid fa-sliders" style="color:#1f6fb2"></i>') + X.esc(w.label) + (w.id === live ? ' <span class="badge b-blue">live plan</span>' : '') + '</div><div class="d">' + X.esc(w.note) + '</div><div class="w">' + wtext(w) + '</div></div>'; }).join('');
+    var s = X.settings(); document.getElementById('liveinfo').innerHTML = 'Live plan: <b>' + X.esc(s.preset === 'custom' ? 'custom weights' : (P.filter(function (w) { return w.id === s.preset; })[0] || {}).label) + '</b>' + (s.whatifs.length ? ' · ' + s.whatifs.length + ' what-if(s) applied to every column' : '');
+  }
+  // run the presets one after another so the overlay can say which one is planning
+  function runAll(cb) {
+    var ids = P.map(function (w) { return w.id; }).concat(custom ? ['custom'] : []), i = 0;
+    (function next() {
+      if (i >= ids.length) { cb(); return; }
+      var id = ids[i++], st = stFor(id), c = X.cachedPlan(st);
+      if (c) { results[id] = c; next(); return; }
+      X.busy(true, 'Planning ' + (id === 'custom' ? 'custom weights' : (P.filter(function (w) { return w.id === id; })[0] || {}).label) + ' (' + i + ' of ' + ids.length + ')');
+      setTimeout(function () { try { results[id] = X.computePlan(st); } finally { X.busy(false); } next(); }, 30);
+    })();
+  }
+  function draw() {
+    var cols = P.map(function (w) { return { id: w.id, label: w.label.replace(' (fixed sequence)', '').replace(' (recommended)', ''), w: w }; });
+    if (custom) cols.push({ id: 'custom', label: 'Custom', w: cw });
+    var live = X.settings().preset;
+    var ROWS = [
+      ['Delivery', null], ['OTIF — committed lines due in horizon', function (k) { return k.otif; }, 'pct', 1], ['OTIF — export', function (k) { return k.otifExport; }, 'pct', 1], ['OTIF — committed domestic', function (k) { return k.otifDomestic; }, 'pct', 1],
+      ['Late lines', function (k) { return k.late; }, 'n', -1], ['Delay cost', function (k) { return k.delayCost; }, 'rs', -1],
+      ['Commercial', null], ['Contribution in horizon', function (k) { return k.contribution; }, 'rs', 1], ['Sheets planned', function (k) { return k.sheets; }, 'n', 1],
+      ['Manufacturing', null], ['Changeover time', function (k) { return k.chgMin / 60; }, 'h', -1], ['Daylight plate swaps', function (k) { return k.swaps; }, 'n', -1], ['Cure-band changes', function (k) { return k.bandChanges; }, 'n', -1],
+      ['Cleaning passes', function (k) { return k.cleaning; }, 'n', -1], ['Thickness-mix breaches', function (k) { return k.mixBreach; }, 'n', -1], ['Plate fill', function (k) { return k.fill; }, 'pct', 1],
+      ['Stock norms (end of horizon)', null], ['SKUs at stock-out', function (k) { return k.norm.BLACK; }, 'n', -1], ['SKUs in red', function (k) { return k.norm.RED; }, 'n', -1], ['SKUs healthy or above', function (k) { return k.norm.GREEN + k.norm.BLUE; }, 'n', 1]
+    ];
+    function f(v, t) { return t === 'pct' ? X.pct(v, 1) : t === 'rs' ? X.rs(v) : t === 'h' ? X.n(v, 0) + ' h' : X.n(v); }
+    var h = '<thead><tr><th>Outcome</th>' + cols.map(function (c) { return '<th class="' + (c.id === live ? 'live' : '') + '">' + X.esc(c.label) + (c.id === live ? ' ●' : '') + '</th>'; }).join('') + '</tr></thead><tbody>';
+    ROWS.forEach(function (r) {
+      if (!r[1]) { h += '<tr class="grp"><td colspan="' + (cols.length + 1) + '">' + r[0] + '</td></tr>'; return; }
+      var vals = cols.map(function (c) { return results[c.id] ? r[1](results[c.id].kpi) : null; }), mx = Math.max.apply(null, vals.map(function (v) { return Math.abs(v || 0); })) || 1;
+      var best = r[3] > 0 ? Math.max.apply(null, vals) : Math.min.apply(null, vals);
+      h += '<tr><td>' + r[0] + '</td>' + vals.map(function (v) { return '<td class="bar' + (v === best ? ' best' : '') + '"><div class="cb"><i style="width:' + Math.max(2, Math.round(Math.abs(v) / mx * 52)) + 'px"></i><span class="mono">' + f(v, r[2]) + '</span></div></td>'; }).join('') + '</tr>';
+    });
+    document.getElementById('cmp').innerHTML = h + '</tbody>';
+    document.getElementById('cmpmeta').textContent = cols.length + ' plans · ' + X.D.meta.forwardDays + ' days from ' + X.fmt(X.ASOF);
+    scatter(cols);
+  }
+  function scatter(cols) {   // one point per plan; direct labels (no legend); the live plan is the filled point
+    var W = 330, H = 210, L = 44, B = 30, pts = cols.map(function (c) { var k = results[c.id].kpi; return { id: c.id, label: c.label, x: k.chgMin / 60, y: k.otif * 100 }; });
+    var x0 = Math.min.apply(null, pts.map(function (p) { return p.x; })) * 0.95, x1 = Math.max.apply(null, pts.map(function (p) { return p.x; })) * 1.03;
+    var y0 = Math.floor(Math.min.apply(null, pts.map(function (p) { return p.y; })) - 2), y1 = Math.ceil(Math.max.apply(null, pts.map(function (p) { return p.y; })) + 2);
+    function sx(v) { return L + (v - x0) / (x1 - x0) * (W - L - 12); } function sy(v) { return H - B - (v - y0) / (y1 - y0) * (H - B - 10); }
+    var live = X.settings().preset, g = '';
+    for (var i = 0; i <= 4; i++) { var yv = y0 + (y1 - y0) * i / 4; g += '<line class="gl" x1="' + L + '" x2="' + (W - 8) + '" y1="' + sy(yv) + '" y2="' + sy(yv) + '"/><text x="' + (L - 6) + '" y="' + (sy(yv) + 4) + '" text-anchor="end">' + yv.toFixed(0) + '%</text>'; }
+    g += '<text x="' + (W / 2 + 10) + '" y="' + (H + 10) + '" text-anchor="middle">changeover hours (plate swaps + cure-band changes)</text>';
+    for (var j = 0; j <= 3; j++) { var xv = x0 + (x1 - x0) * j / 3; g += '<text x="' + sx(xv) + '" y="' + (H - B + 14) + '" text-anchor="' + (j === 3 ? 'end' : j === 0 ? 'start' : 'middle') + '">' + X.n(xv) + ' h</text>'; }
+    // direct labels: each takes the first of eight spots around its point that stays inside the plot and clears every point
+    // and every label already placed (greedy, in plan order)
+    var boxes = pts.map(function (p) { var cx = sx(p.x), cy = sy(p.y); return { x0: cx - 7, x1: cx + 7, y0: cy - 7, y1: cy + 7 }; });
+    function hit(b) { return boxes.some(function (o) { return b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0; }) || b.x0 < L + 2 || b.x1 > W - 4 || b.y0 < 2 || b.y1 > H - B - 2; }
+    pts.forEach(function (p) {
+      var on = p.id === live, cx = sx(p.x), cy = sy(p.y), tw = p.label.length * 6 + 4, th = 13, pick = null;
+      [[9, -16], [9, 4], [-9 - tw, -16], [-9 - tw, 4], [-tw / 2, -24], [-tw / 2, 10], [12, -6], [-12 - tw, -6]].some(function (d) {
+        var b = { x0: cx + d[0], x1: cx + d[0] + tw, y0: cy + d[1], y1: cy + d[1] + th }; if (hit(b)) return false; pick = b; return true;
+      });
+      if (!pick) pick = { x0: cx + 9, x1: cx + 9 + tw, y0: cy - 16, y1: cy - 3 };
+      boxes.push(pick);
+      g += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (on ? 6 : 5) + '" fill="' + (on ? '#1f6fb2' : '#fff') + '" stroke="#1f6fb2" stroke-width="2"><title>' + X.esc(p.label + ': OTIF ' + p.y.toFixed(1) + '%, ' + X.n(p.x) + ' h') + '</title></circle>' +
+           '<text x="' + (pick.x0 + 2) + '" y="' + (pick.y1 - 3) + '">' + X.esc(p.label) + '</text>'; });
+    document.getElementById('scatter').innerHTML = '<svg class="sc" width="100%" viewBox="0 0 ' + W + ' ' + (H + 16) + '">' + g + '<line class="ax" x1="' + L + '" x2="' + L + '" y1="10" y2="' + (H - B) + '"/><line class="ax" x1="' + L + '" x2="' + (W - 8) + '" y1="' + (H - B) + '" y2="' + (H - B) + '"/></svg>';
+  }
+  function sliders() {
+    var S = [['profit', 'Profitability — export first'], ['dates', 'Committed delivery dates'], ['norms', 'Stock-norm replenishment'], ['changeover', 'Minimise changeovers'], ['mix', 'Control thickness mix']];
+    document.getElementById('sliders').innerHTML = S.map(function (s, i) { return '<div class="wrow"><span><b>' + (i + 1) + '.</b> ' + s[1] + '</span><input type="range" min="0" max="100" value="' + cw[s[0]] + '" data-w="' + s[0] + '"><span class="wv" id="wv-' + s[0] + '">' + cw[s[0]] + '</span></div>'; }).join('') +
+      '<div class="wrow"><span>Delay penalty (× ' + X.rs(X.D.cfg.delayPenalty.EXPORT) + ' / export line-day)</span><input type="range" min="0" max="30" value="' + Math.round(cw.delayScale * 10) + '" data-w="delayScale"><span class="wv" id="wv-delayScale">×' + cw.delayScale.toFixed(1) + '</span></div>' +
+      '<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary btn-sm" id="run"><i class="fa-solid fa-play"></i> Plan with these weights</button><button class="btn btn-outline btn-sm" id="apply" ' + (custom ? '' : 'disabled') + '>Make it the live plan</button></div>' +
+      '<div class="hint small" style="margin-top:6px">Takes a couple of seconds — the whole ' + X.D.meta.forwardDays + '-day plan is rebuilt press cycle by press cycle.</div>';
+  }
+  document.getElementById('sliders').addEventListener('input', function (e) { var t = e.target; if (!t.dataset.w) return; var k = t.dataset.w; cw[k] = k === 'delayScale' ? +t.value / 10 : +t.value; document.getElementById('wv-' + k).textContent = k === 'delayScale' ? '×' + cw[k].toFixed(1) : cw[k]; });
+  document.getElementById('sliders').addEventListener('click', function (e) {
+    if (e.target.closest('#run')) { custom = true; delete results.custom; runAll(function () { draw(); sliders(); }); }
+    if (e.target.closest('#apply')) X.replan(function () { X.State.set('plan', { preset: 'custom', weights: cw }); }, 'Applying custom weights', function () { drawPresets(); draw(); });
+  });
+  document.getElementById('presets').addEventListener('click', function (e) { var c = e.target.closest('[data-p]'); if (!c) return; var id = c.getAttribute('data-p'); X.replan(function () { X.State.set('plan', { preset: id }); }, 'Switching the live plan', function () { drawPresets(); draw(); X.toast('Live plan is now “' + X.esc((P.filter(function (w) { return w.id === id; })[0] || {}).label) + '” on every page'); }); });
+  document.getElementById('objs').innerHTML = OBJ.map(function (o) {
+    var d = { profit: 'Export orders carry a higher gross margin, so they are prioritised. In the weighted plan margin counts more as a line nears its date — it separates urgent lines rather than pushing a far-off export ahead of a committed order due tomorrow.',
+              dates: 'Domestic orders with a confirmed delivery date. A committed date matters from the day it is confirmed and urgency climbs over its last two weeks; the delay penalty prices every day late (' + X.rs(X.D.cfg.delayPenalty.EXPORT) + ' export, ' + X.rs(X.D.cfg.delayPenalty.DOM_COMMITTED) + ' committed domestic per line-day).',
+              norms: 'Colour-banded stock norms for make-to-stock SKUs — black (stock-out), red, yellow, green, blue. Replenishment fills the capacity committed work leaves.',
+              changeover: 'Every daylight whose texture changes costs a plate swap; every cure-band change costs a profile change; a lighter decor after a darker one costs a cleaning pass. The weighted plan keeps texture campaigns running wherever that costs no delivery.',
+              mix: 'Book building is still manual, so each press load keeps its distinct sheet thicknesses at or under the target; only a committed line within ~4 days of its date may add one more, never beyond the hard cap.' }[o.id];
+    return '<div class="obj"><div class="nb">' + o.n + '</div><div><b>' + X.esc(o.label) + '</b> <span class="hint small">' + o.side + '-facing</span><div class="small" style="color:var(--color-text-secondary);margin-top:2px">' + d + '</div></div></div>'; }).join('');
+  function render() { drawPresets(); sliders(); runAll(draw); }
+  X.withPlan(render); X.whenPlanChanges(function () { results = {}; render(); });
+</script>
+</body>
+</html>

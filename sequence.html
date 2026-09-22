@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Colour & Changeover · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .kpi .v small { font-size:12px; font-weight:500; color:var(--color-text-hint); margin-left:4px; }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--color-text-muted); margin-top:8px; align-items:center; }
+  .legend i.sw { display:inline-block; width:14px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  #log-wrap { max-height:460px; }
+  .ev { font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; }
+  .ev.swap { background:#e3f2fd; color:#1565c0; } .ev.clean { background:#fff3e0; color:#b25f00; } .ev.band { background:#ede7f6; color:#5e35b1; }
+  .rule { display:grid; grid-template-columns:22px 1fr; gap:8px; font-size:12px; margin-bottom:8px; } .rule .nb { background:var(--color-primary-light); color:var(--color-primary-dark); border-radius:5px; text-align:center; font-weight:700; font-size:11px; padding:2px 0; }
+  .ladder-pick { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px; font-size:12px; }
+  .ladder-pick select { font:12px 'Roboto'; padding:4px 7px; border:1px solid var(--color-border); border-radius:5px; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Colour &amp; Changeover — shade ladders, texture campaigns and cure-band runs</h1><div class="crumb">Scheduling › Colour &amp; Changeover › <span id="ctx"></span></div></div>
+    <div class="actions"><a class="btn btn-outline btn-sm" href="objectives.html"><i class="fa-solid fa-sliders"></i> Objective Studio</a><button class="btn btn-outline btn-sm" id="xl"><i class="fa-solid fa-file-excel"></i> Excel</button></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-layer-group"></i> Cure-band runs by press — Merino today against the live plan <span class="right hint">every daylight of a cycle shares one cure profile; a band change costs <span id="bandmin"></span> min</span></div>
+    <div class="card-body">
+      <div class="filters" id="bpager"></div>
+      <div class="gantt" id="bands"></div>
+      <div class="legend" id="blegend"></div>
+    </div>
+  </div>
+  <div class="grid-2-1">
+    <div class="card">
+      <div class="card-head"><i class="fa-solid fa-stairs"></i> Light-to-dark shade ladder of one mould set <span class="right hint" id="lmeta"></span></div>
+      <div class="card-body">
+        <div class="ladder-pick"><span class="fl" style="font-size:10px;text-transform:uppercase;color:var(--color-text-muted);font-weight:600">Mould set</span><select id="set"></select><span class="hint" id="setinfo"></span></div>
+        <div id="ladder" style="height:260px"></div>
+        <div class="legend"><span><i class="sw" style="background:#2a78d6"></i>Darkest shade pressed on the set in a cycle (1 = lightest, 10 = darkest)</span><span><i class="sw" style="background:#fab219"></i>Cleaning pass — the ladder starts again</span><span><i class="sw" style="background:rgba(154,162,173,0.35)"></i>Refurbishment — the set comes back clean</span><span><i class="sw" style="background:#1f2733;width:2px"></i>As-of</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><i class="fa-solid fa-scale-balanced"></i> The sequencing rules</div>
+      <div class="card-body">
+        <div class="rule"><div class="nb">1</div><div><b>Light to dark on a set.</b> Each cycle a mould set may press only shades at or above the darkest shade it pressed since its last cleaning — a dark decor leaves resin and pigment on the plate that would mark a lighter one.</div></div>
+        <div class="rule"><div class="nb">2</div><div><b>Reset = a cleaning pass.</b> To go lighter, one daylight of that set runs a cleaning pass with no output for one cycle — or the lighter work goes to another set of the same texture that is still light.</div></div>
+        <div class="rule"><div class="nb">3</div><div><b>One texture per daylight, one cure band per cycle.</b> Changing a daylight's texture is a plate swap (<span id="swapmin"></span> min); changing the cure profile is a band change.</div></div>
+        <div class="rule"><div class="nb">4</div><div><b>Campaigns.</b> The weighted plan keeps a mounted texture running while its work is worth more than the changeover, and a texture only gets a new daylight when it has enough released work to pay for the swap — Merino today keeps a texture only while it appears in the next lines of the fixed list.</div></div>
+        <div id="rulecheck" class="small" style="margin-top:6px"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-list"></i> Changeover log — live plan <span class="right hint" id="logmeta"></span></div>
+    <div class="card-body">
+      <div class="filters"><span class="fl">Press</span><select id="press"></select><span class="fl">Show</span><select id="kind"><option value="">All changeovers</option><option value="swap">Plate swaps</option><option value="clean">Cleaning passes</option><option value="band">Cure-band changes</option></select><span id="lpager"></span></div>
+      <div class="tbl-wrap" id="log-wrap"><table class="tbl" id="log"></table></div>
+    </div>
+  </div>
+</main></div>
+<script>window.MER_PAGE='sequence'; window.MER_TITLE='Colour & Changeover'; window.MER_ICON='fa-palette';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script><script src="assets/vendor/echarts.min.js"></script><script src="assets/vendor/xlsx.full.min.js"></script>
+<script>
+  var X = window.MERX, R = null, T0 = null, m = null, chart = null, bp = null, lp = null, bdraw = null, ldraw = null, $ = function (id) { return document.getElementById(id); };
+  var BANDC = X.COLOR.band, ST = X.COLOR.status;
+  function lineShade(r, id) { var ln = r.byId[id], sk = ln ? ln.skuId : String(id).indexOf('NORM/') === 0 ? String(id).slice(5) : null, s = sk && r.m.skus[sk]; return s ? s.shade : 0; }
+  function rowShade(r, rw) { var x = 0; rw.pl.forEach(function (q) { var sh = lineShade(r, q[0]); if (sh > x) x = sh; }); return x; }
+
+  // per plan: changeover events (swap / cleaning / band) with from -> to, and texture campaign lengths per daylight
+  function events(r) {
+    if (r._seq) return r._seq;
+    var ev = [], byP = {}, runs = [], cur = {};
+    r.cycles.forEach(function (c, i) { (byP[c.p] = byP[c.p] || []).push([c, i]); });
+    r.m.presses.forEach(function (p) {
+      var slot = [], run = [], prevBand = null;
+      (byP[p.id] || []).forEach(function (q) {
+        var c = q[0], plan = q[1] >= r.nHist;
+        if (plan && c.bandChg) ev.push({ t: c.start, p: p.id, c: c, r: null, kind: 'band', from: prevBand, to: c.band, min: r.m.bandMin });
+        c.rows.forEach(function (rw, k) {
+          if (!rw.s) return;
+          if (plan && rw.swap) ev.push({ t: c.start, p: p.id, c: c, r: k, kind: 'swap', from: slot[k] || null, to: rw.s, min: r.m.swapMin, why: rw.why, shade: rowShade(r, rw) });
+          if (plan && rw.clean) ev.push({ t: c.s0, p: p.id, c: c, r: k, kind: 'clean', from: rw.s, to: rw.s, min: 0, why: rw.why });
+          if (slot[k] === rw.s && run[k]) run[k].n++; else { if (run[k] && run[k].plan) runs.push(run[k].n); run[k] = { n: 1, plan: plan }; }
+          slot[k] = rw.s;
+        });
+        prevBand = c.band;
+      });
+      run.forEach(function (x) { if (x && x.plan) runs.push(x.n); });
+    });
+    var viol = 0;   // light-to-dark check over every set: a darker-then-lighter step without a cleaning pass in between
+    var last = {}, rf = {};   // a refurbishment also resets the ladder (the set comes back clean)
+    Object.keys(r.state.sets).forEach(function (sid) { rf[sid] = { list: r.state.sets[sid].refurbs.map(function (f) { return f.from; }).sort(function (x, y) { return x - y; }), i: 0 }; });
+    r.cycles.forEach(function (c) {
+      var seen = {};
+      c.rows.forEach(function (rw) { if (!rw.s) return; var x = seen[rw.s] = seen[rw.s] || { sh: 0, clean: false }; if (rw.clean) x.clean = true; var sh = rowShade(r, rw); if (sh > x.sh) x.sh = sh; });
+      Object.keys(seen).forEach(function (sid) {
+        var x = seen[sid], q = rf[sid];
+        while (q && q.i < q.list.length && q.list[q.i] <= c.start) { q.i++; last[sid] = 0; }
+        if (x.clean) { last[sid] = 0; return; }
+        var minSh = 99; c.rows.forEach(function (rw) { if (rw.s === sid) rw.pl.forEach(function (q) { var sh = lineShade(r, q[0]); if (sh && sh < minSh) minSh = sh; }); });
+        if (last[sid] && minSh < 99 && minSh < last[sid]) viol++;
+        if (x.sh) last[sid] = Math.max(last[sid] || 0, x.sh);
+      });
+    });
+    r._seq = { ev: ev.sort(function (a, b) { return a.t - b.t || (a.p < b.p ? -1 : 1) || (a.r || 0) - (b.r || 0); }), campaign: runs.length ? runs.reduce(function (a, b) { return a + b; }, 0) / runs.length : 0, viol: viol };
+    return r._seq;
+  }
+
+  function render(r) {
+    R = r; m = r.m;
+    var st = X.settings(), tst = { preset: 'today', weights: null, whatifs: st.whatifs };
+    X.withPlan(function (t) { T0 = t; draw(); }, tst, 'Planning Merino today for the comparison');
+  }
+  function draw() {
+    var st = X.settings(), live = st.preset === 'custom' ? 'Custom weights' : ((X.D.m.weights.filter(function (w) { return w.id === st.preset; })[0] || {}).label || st.preset);
+    var a = R.kpi, b = T0.kpi, ea = events(R), eb = events(T0), same = st.preset === 'today';
+    $('ctx').textContent = 'live plan: ' + live + (same ? '' : ' · compared with Merino today') + ' · ' + X.D.meta.forwardDays + ' days from ' + X.fmt(X.ASOF);
+    $('bandmin').textContent = m.bandMin; $('swapmin').textContent = m.swapMin;
+    function d(x, y, lowerBetter) { if (same || !y) return ''; var p = (x - y) / y; return '<small>' + (p > 0 ? '+' : '') + Math.round(p * 100) + '% vs today</small>'; }
+    function cls(x, y) { return same ? 'blue' : x <= y ? 'green' : 'amber'; }
+    $('kpis').innerHTML = [
+      ['Daylight plate swaps', X.n(a.swaps) + d(a.swaps, b.swaps), 'Merino today ' + X.n(b.swaps), cls(a.swaps, b.swaps)],
+      ['Changeover time', X.n(Math.round(a.chgMin / 60)) + ' h' + d(a.chgMin, b.chgMin), 'swaps × ' + m.swapMin + ' min + band changes × ' + m.bandMin + ' min · today ' + X.n(Math.round(b.chgMin / 60)) + ' h', cls(a.chgMin, b.chgMin)],
+      ['Cure-band changes', X.n(a.bandChanges) + d(a.bandChanges, b.bandChanges), 'Merino today ' + X.n(b.bandChanges), cls(a.bandChanges, b.bandChanges)],
+      ['Cleaning passes', X.n(a.cleaning) + d(a.cleaning, b.cleaning), 'daylights pressed empty to reset · today ' + X.n(b.cleaning), cls(a.cleaning, b.cleaning)],
+      ['Texture campaign', ea.campaign.toFixed(1) + ' cycles', 'average run of one set in one daylight · today ' + eb.campaign.toFixed(1), same ? 'blue' : ea.campaign >= eb.campaign ? 'green' : 'amber'],
+      ['Light → dark breaches', X.n(ea.viol), 'checked over every set and cycle, history and plan', ea.viol ? 'red' : 'green']
+    ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');
+    $('rulecheck').innerHTML = ea.viol ? '<span class="deviation">' + ea.viol + ' light-to-dark breaches found.</span>' : '<span class="ok-val"><i class="fa-solid fa-circle-check"></i> Rule 1 holds on every set in every cycle of the history and the plan (' + X.n(R.cycles.length) + ' cycles checked).</span>';
+    bandRuns(); ladderInit(); logInit();
+  }
+
+  // ------------------------------------------------------------------ cure-band runs: Merino today vs live, per press
+  function bandRuns() {
+    var st = X.settings(), same = st.preset === 'today', lanes = [], bars = [];
+    m.presses.forEach(function (p) {
+      [[T0, 'today', 'Merino today'], [R, 'live', 'Live plan']].forEach(function (x) {
+        if (same && x[1] === 'live') return;
+        var id = p.id + '-' + x[1]; lanes.push({ id: id, label: p.name, sub: x[2] });
+        var run = null;
+        x[0].cycles.forEach(function (c, i) {
+          if (c.p !== p.id || i < x[0].nHist) return;
+          if (run && run.b === c.band && c.start - run.e <= 30) { run.e = c.end; run.n++; }
+          else { run = { b: c.band, s: c.start, e: c.end, n: 1 }; bars.push(run); run.lane = id; }
+        });
+      });
+    });
+    bars.forEach(function (b) { b.color = BANDC[b.b]; b.label = b.b; b.tip = b.b + ' · ' + (m.bandById[b.b] || {}).name + ' · ' + b.n + ' cycle' + (b.n > 1 ? 's' : '') + ' · ' + X.fmt(b.s) + ' – ' + X.fmt(b.e); b.lane = b.lane; });
+    bdraw = function (w) { X.gantt($('bands'), lanes, bars, { startMin: w.startMin, endMin: w.endMin, laneW: 170, laneTitle: 'Press · plan' }); };
+    if (!bp) bp = X.pager($('bpager'), function (w) { if (bdraw) bdraw(w); }, { days: 3, from: X.ASOF - (X.ASOF % 1440), to: X.END }); else bdraw(bp.win());
+    $('blegend').innerHTML = m.bands.map(function (b) { return '<span><i class="sw" style="background:' + BANDC[b.id] + '"></i>' + b.id + ' ' + X.esc(b.name) + ' (' + b.lo + (b.hi !== b.lo ? '–' + b.hi : '') + ' mm, ' + b.pressMin + ' min)</span>'; }).join('');
+  }
+
+  // ------------------------------------------------------------------ shade ladder of one set
+  function ladderInit() {
+    var use = {};
+    R.cycles.forEach(function (c, i) { if (i < R.nHist) return; c.rows.forEach(function (rw) { if (rw.s) use[rw.s] = (use[rw.s] || 0) + 1; }); });
+    var sets = Object.keys(use).sort(function (a, b) { return use[b] - use[a] || (a < b ? -1 : 1); });
+    var cur = $('set').value, h = X.hashParam();
+    $('set').innerHTML = sets.map(function (s) { return '<option value="' + s + '">' + s + ' · ' + X.esc(X.finishName(m.sets[s].finishId)) + ' · ' + use[s] + ' daylight-loads</option>'; }).join('');
+    $('set').value = m.sets[h] && use[h] ? h : cur && use[cur] ? cur : sets[0];
+    ladder();
+  }
+  function ladder() {
+    var sid = $('set').value, s = m.sets[sid]; if (!s) return;
+    var pts = [], cleans = [], refs = (R.state.sets[sid] || { refurbs: [] }).refurbs;
+    R.cycles.forEach(function (c) {
+      var sh = 0, cl = false, dl = 0;
+      c.rows.forEach(function (rw) { if (rw.s !== sid) return; dl++; if (rw.clean) cl = true; var x = rowShade(R, rw); if (x > sh) sh = x; });
+      if (!dl) return;
+      if (cl) cleans.push([c.s0, 0, c.id]);
+      if (sh) pts.push([c.s0, sh, c.id, c.p, dl]);
+    });
+    var lo = X.ASOF - 2 * 1440, hi = X.ASOF + 5 * 1440;
+    var inW = pts.filter(function (q) { return q[0] >= lo && q[0] <= hi; }), cw = cleans.filter(function (q) { return q[0] >= lo && q[0] <= hi; });
+    $('setinfo').textContent = X.finishName(s.finishId) + ' · ' + s.bed + ' ft · ' + s.plates + ' plates';
+    $('lmeta').textContent = inW.length + ' loads and ' + cw.length + ' cleaning pass' + (cw.length === 1 ? '' : 'es') + ' from ' + X.fmtD(lo) + ' to ' + X.fmtD(hi);
+    if (!chart) chart = echarts.init($('ladder'));
+    var data = [], areas = [];
+    var back = refs.filter(function (f) { return f.to >= lo - 2880 && f.from <= hi; });
+    back.forEach(function (f) { areas.push([{ name: f.whatif ? 'Refurbishment (what-if)' : 'Refurbishment', xAxis: X.dateOf(Math.max(f.from, lo)).getTime() }, { xAxis: X.dateOf(Math.min(f.to, hi)).getTime() }]); });
+    pts.concat(cleans.map(function (q) { return [q[0], 0, q[2], null, 0, 'clean']; }), back.map(function (f) { return [f.to, 0, 'back from refurbishment', null, 0, 'refurb']; }))
+      .sort(function (a, b) { return a[0] - b[0]; }).forEach(function (q) { data.push({ value: [X.dateOf(q[0]).getTime(), q[1]], cyc: q[2], p: q[3], dl: q[4], kind: q[5] || null }); });
+    chart.setOption({
+      animation: false, grid: { left: 40, right: 14, top: 14, bottom: 30 },
+      tooltip: { trigger: 'item', formatter: function (p) { var d = p.data; if (!d || !d.value) return p.name || ''; var when = X.fmt(X.minOf(new Date(d.value[0]).toISOString()));
+        return d.kind === 'clean' ? '<b>Cleaning pass</b><br>' + d.cyc + '<br>' + when : d.kind === 'refurb' ? '<b>Back from refurbishment</b><br>the set is clean again<br>' + when : '<b>' + d.cyc + '</b> (' + d.p + ')<br>darkest shade ' + d.value[1] + ' · ' + d.dl + ' daylight' + (d.dl > 1 ? 's' : '') + '<br>' + when; } },
+      xAxis: { type: 'time', min: X.dateOf(lo).getTime(), max: X.dateOf(hi).getTime(), axisLabel: { fontSize: 10, color: '#8a93a0', formatter: function (v) { var dd = new Date(v); return dd.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dd.getMonth()]; } }, splitLine: { show: false }, axisLine: { lineStyle: { color: '#d5dbe0' } } },
+      yAxis: { type: 'value', min: 0, max: 10, interval: 2, name: 'shade', nameTextStyle: { fontSize: 10, color: '#8a93a0' }, axisLabel: { fontSize: 10, color: '#8a93a0' }, splitLine: { lineStyle: { color: '#eef1f4' } } },
+      series: [{ type: 'line', step: 'end', symbolSize: 7, data: data, lineStyle: { width: 2, color: X.COLOR.accent },
+        itemStyle: { color: function (p) { return p.data.kind === 'clean' ? ST.warning : p.data.kind === 'refurb' ? '#8a93a0' : X.COLOR.accent; } },
+        markArea: { silent: true, itemStyle: { color: 'rgba(154,162,173,0.18)' }, label: { fontSize: 10, color: '#6b7682', position: 'insideTop' }, data: areas },
+        markLine: { symbol: 'none', silent: true, lineStyle: { color: X.COLOR.ink, width: 1, type: 'solid' }, label: { formatter: 'as-of', fontSize: 10, color: X.COLOR.ink }, data: [{ xAxis: X.dateOf(X.ASOF).getTime() }] } }]
+    }, true);
+  }
+  $('set').addEventListener('change', ladder);
+
+  // ------------------------------------------------------------------ changeover log
+  function logInit() {
+    if (!$('press').options.length) $('press').innerHTML = '<option value="">All presses</option>' + m.presses.map(function (p) { return '<option value="' + p.id + '">' + X.esc(p.name) + '</option>'; }).join('');
+    ldraw = function (w) { log(w); };
+    if (!lp) lp = X.pager($('lpager'), function (w) { if (ldraw) ldraw(w); }, { days: 1, from: X.ASOF - (X.ASOF % 1440), to: X.END }); else ldraw(lp.win());
+  }
+  function setTxt(sid) { if (!sid) return '<span class="hint">empty daylight</span>'; var s = m.sets[sid]; return '<span class="mono strong">' + X.esc(sid) + '</span> <span class="hint">' + X.esc(X.finishName(s ? s.finishId : '')) + '</span>'; }
+  function log(w) {
+    var pr = $('press').value, kind = $('kind').value, ev = events(R).ev.filter(function (e) { return (!pr || e.p === pr) && (!kind || e.kind === kind) && e.t >= Math.max(w.startMin, X.ASOF - 60) && e.t < w.endMin; });
+    var mins = ev.reduce(function (a, e) { return a + e.min; }, 0);
+    $('logmeta').textContent = ev.length + ' changeovers · ' + X.n(mins) + ' min in this window';
+    var CAP = 400;
+    $('log').innerHTML = '<thead><tr><th>When</th><th>Press</th><th>Cycle</th><th class="num">Daylight</th><th>Type</th><th>From</th><th>To</th><th class="num">Minutes</th><th>Why</th></tr></thead><tbody>' +
+      (ev.length ? ev.slice(0, CAP).map(function (e) {
+        var k = e.kind === 'swap' ? '<span class="ev swap">plate swap</span>' : e.kind === 'clean' ? '<span class="ev clean">cleaning pass</span>' : '<span class="ev band">cure-band change</span>';
+        return '<tr><td class="mono">' + X.fmt(e.t) + '</td><td>' + e.p + '</td><td><a class="mono" href="loadbuilder.html#' + e.c.id + '">' + e.c.id + '</a></td><td class="num mono">' + (e.r != null ? e.r + 1 : '—') + '</td><td>' + k + '</td>' +
+          (e.kind === 'band' ? '<td>' + X.esc(e.from ? e.from + ' ' + (m.bandById[e.from] || {}).name : '—') + '</td><td>' + X.esc(e.to + ' ' + (m.bandById[e.to] || {}).name) + '</td>' : '<td>' + setTxt(e.kind === 'clean' ? null : e.from) + '</td><td>' + setTxt(e.to) + (e.kind === 'swap' && e.shade ? ' <span class="hint">shade ' + e.shade + '</span>' : '') + '</td>') +
+          '<td class="num mono">' + (e.min || '—') + '</td><td class="small">' + X.esc(e.why || (e.kind === 'band' ? 'the most valuable work for this press is in another cure band' : '')) + '</td></tr>';
+      }).join('') + (ev.length > CAP ? '<tr><td colspan="9" class="hint">… ' + (ev.length - CAP) + ' more — narrow the window or the press</td></tr>' : '') : '<tr><td colspan="9" class="hint">No changeovers in this window.</td></tr>') + '</tbody>';
+  }
+  ['press', 'kind'].forEach(function (id) { $(id).addEventListener('change', function () { if (lp) log(lp.win()); }); });
+
+  $('xl').addEventListener('click', function () {
+    var ev = events(R).ev;
+    X.xlsx([{ name: 'Changeovers', cols: ['When', 'Press', 'Cycle', 'Daylight', 'Type', 'From', 'To', 'Minutes', 'Why'],
+      rows: ev.map(function (e) { return [X.fmt(e.t), e.p, e.c.id, e.r != null ? e.r + 1 : '', e.kind === 'swap' ? 'Plate swap' : e.kind === 'clean' ? 'Cleaning pass' : 'Cure-band change', e.from || '', e.to || '', e.min, e.why || '']; }),
+      widths: [18, 7, 11, 9, 16, 12, 12, 9, 70] }], 'Merino_Changeovers_' + X.yymmdd(X.ASOF) + '.xlsx');
+  });
+  window.addEventListener('resize', function () { if (chart) chart.resize(); });
+  window.addEventListener('mer:activated', function () { if (chart) chart.resize(); });
+  window.addEventListener('hashchange', function () { var h = X.hashParam(); if (m && m.sets[h]) { $('set').value = h; ladder(); } });
+  X.withPlan(render);
+  X.whenPlanChanges(function (r) { bp = null; lp = null; $('bpager').innerHTML = ''; $('lpager').innerHTML = ''; render(r); });
+</script>
+</body>
+</html>

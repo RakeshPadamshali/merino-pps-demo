@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Order Book & BTP · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .tbl-wrap { max-height:calc(100vh - 330px); }
+  .wif { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .wif .w { display:inline-flex; gap:6px; align-items:center; background:#fff8e1; border:1px solid #ffe082; color:#6d4c00; border-radius:14px; padding:3px 6px 3px 10px; font-size:11.5px; }
+  .wif .w button { border:none; background:rgba(0,0,0,.08); border-radius:50%; width:18px; height:18px; cursor:pointer; font-size:10px; }
+  .imp td.later { color:#c62828; font-weight:600; } .imp td.earlier { color:#2e7d32; font-weight:600; }
+  .act input { width:70px; font:12px 'Roboto'; padding:3px 6px; border:1px solid var(--color-border); border-radius:4px; }
+  .elig { display:flex; gap:4px; flex-wrap:wrap; } .elig .e { font-size:10.5px; padding:2px 6px; border-radius:4px; border:1px solid var(--color-border); } .elig .e.ok { background:#e8f5e9; border-color:#c8e6c9; color:#2e7d32; } .elig .e.no { color:#8a93a0; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Order Book &amp; balance-to-produce</h1><div class="crumb">Planning › Order Book &amp; BTP › <span id="ctx"></span></div></div>
+    <div class="actions"><button class="btn btn-brand btn-sm" id="rush"><i class="fa-solid fa-ship"></i> Insert rush export order</button><button class="btn btn-outline btn-sm" id="xl"><i class="fa-solid fa-file-excel"></i> Excel</button></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="card" id="wifcard"><div class="card-head"><i class="fa-solid fa-flask"></i> Live what-ifs on this plan <span class="right hint">every page re-plans from the same state · Reset demo clears them</span></div><div class="card-body"><div class="wif" id="wifs"></div></div></div>
+  <div class="card" id="impcard" style="display:none"><div class="card-head"><i class="fa-solid fa-code-compare"></i> Priority-order impact report — <span id="imptitle"></span><span class="right" id="impmeta"></span></div><div class="card-body" id="imp"></div></div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-file-invoice"></i> Order lines <span class="right"><span class="formula">BTP = <b>ordered</b> − cancelled + rejected − <b>allocated FG stock</b> − <b>good sheets made</b></span></span></div>
+    <div class="card-body">
+      <div class="filters">
+        <span class="fl">Show</span><select id="f-show"><option value="open">Open lines</option><option value="late">Late or not in horizon</option><option value="all">All lines</option><option value="done">Done</option></select>
+        <span class="fl">Class</span><select id="f-cls"><option value="">All</option><option value="EXPORT">Export</option><option value="DOM_COMMITTED">Committed domestic</option><option value="DOM_OPEN">Open domestic</option></select>
+        <span class="fl">Search</span><input id="f-q" placeholder="order / customer / decor / SKU" size="26">
+        <span class="hint" id="fc" style="margin-left:auto"></span>
+      </div>
+      <div class="tbl-wrap"><table class="tbl" id="tbl"></table></div>
+      <div class="note"><i class="fa-solid fa-circle-info"></i><span><b>Stateless balance-to-produce:</b> BTP is never stored — it is recomputed from the order, the stock allocated to it and the good sheets already pressed every time the plan runs. Cancel an order, downgrade pressed sheets or record a customer rejection below and the balance, the plan and every page follow without anyone re-entering a requirement. Make-to-stock SKUs are served from free finished stock first.</span></div>
+    </div>
+  </div>
+</main></div>
+<script>window.MER_PAGE='orders'; window.MER_TITLE='Order Book & BTP'; window.MER_ICON='fa-file-invoice';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script><script src="assets/vendor/xlsx.full.min.js"></script>
+<script>
+  var X = window.MERX, R = null, m = null, open = {}, CAP = 300, more = 0;
+  function render(r) {
+    R = r; m = r.m;
+    var L = r.lines.filter(function (x) { return !x.norm; }), op = L.filter(function (x) { return x.status !== 'Done' && x.status !== 'Cancelled'; }), k = r.kpi;
+    var btp = op.reduce(function (a, x) { return a + x.btp; }, 0), exp = op.filter(function (x) { return x.cls === 'EXPORT'; }).reduce(function (a, x) { return a + x.btp; }, 0);
+    document.getElementById('ctx').textContent = X.D.orders.length + ' orders · ' + L.length + ' lines · as of ' + X.fmt(X.ASOF);
+    document.getElementById('kpis').innerHTML = [
+      ['Open lines', X.n(op.length), 'of ' + X.n(L.length) + ' order lines', 'blue'],
+      ['Balance to produce', X.n(btp), 'sheets still to press', 'blue'],
+      ['Export share', X.pct(btp ? exp / btp : 0, 0), 'of the open balance', 'brand'],
+      ['Overdue at as-of', X.n(k.overdueAtAsOf), 'committed lines past due, not yet made', k.overdueAtAsOf ? 'amber' : 'green'],
+      ['Late in plan', X.n(k.late), 'committed lines finishing after due', k.late ? 'red' : 'green'],
+      ['Delay cost', X.rs(k.delayCost), 'Rs per line-day late, by class', 'amber']
+    ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');
+    // what-ifs
+    var st = X.settings();
+    document.getElementById('wifs').innerHTML = st.whatifs.length ? st.whatifs.map(function (w) { return '<span class="w"><i class="fa-solid fa-flask"></i>' + X.esc(X.whatifLabel(w)) + '<button data-rm="' + X.esc(w.id) + '" title="Remove this what-if">✕</button></span>'; }).join('') :
+      '<span class="hint">No what-ifs — this is the plan as the order book stands. Insert the rush export order, or cancel / downgrade / reject from a line below.</span>';
+    document.getElementById('rush').disabled = st.whatifs.some(function (w) { return w.type === 'rush'; });
+    impact(st);
+    table();
+  }
+  // before / after the most recent what-if (both plans are cached by the host, so this is instant after the first run)
+  function impact(st) {
+    var card = document.getElementById('impcard');
+    if (!st.whatifs.length) { card.style.display = 'none'; return; }
+    var last = st.whatifs[st.whatifs.length - 1], before = { preset: st.preset, weights: st.weights, whatifs: st.whatifs.slice(0, -1) };
+    X.withPlan(function (B) {
+      var A = R, rows = [];
+      A.lines.forEach(function (a) {
+        if (a.norm) return; var b = B.byId[a.id];
+        if (!b) { rows.push({ a: a, b: null, d: null, kind: 'new' }); return; }
+        var ra = a.ready == null ? X.END + 1440 : a.ready, rb = b.ready == null ? X.END + 1440 : b.ready, d = (ra - rb) / 1440;
+        if (Math.abs(d) >= 0.25 || a.status !== b.status || a.btp !== b.btp) rows.push({ a: a, b: b, d: d, kind: d > 0.25 ? 'later' : d < -0.25 ? 'earlier' : 'same' });
+      });
+      var later = rows.filter(function (x) { return x.kind === 'later'; }), newLate = rows.filter(function (x) { return x.b && x.a.lateDays > 0 && x.b.lateDays === 0; });
+      var dk = A.kpi, bk = B.kpi;
+      document.getElementById('imptitle').textContent = X.whatifLabel(last);
+      document.getElementById('impmeta').innerHTML = later.length + ' lines later · ' + rows.filter(function (x) { return x.kind === 'earlier'; }).length + ' earlier · ' + newLate.length + ' newly late';
+      rows.sort(function (x, y) { return (x.kind === 'new' ? -1 : 0) - (y.kind === 'new' ? -1 : 0) || Math.abs(y.d || 0) - Math.abs(x.d || 0); });
+      document.getElementById('imp').innerHTML =
+        '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">' + [
+          ['OTIF', X.pct(bk.otif, 1) + ' → ' + X.pct(dk.otif, 1)], ['Late lines', bk.late + ' → ' + dk.late], ['Delay cost', X.rs(bk.delayCost) + ' → ' + X.rs(dk.delayCost)],
+          ['Sheets planned', X.n(bk.sheets) + ' → ' + X.n(dk.sheets)], ['Contribution', X.rs(bk.contribution) + ' → ' + X.rs(dk.contribution)]
+        ].map(function (q) { return '<div class="kpi grey"><div class="k">' + q[0] + '</div><div class="v" style="font-size:15px">' + q[1] + '</div></div>'; }).join('') + '</div>' +
+        '<div class="tbl-wrap" style="max-height:300px"><table class="tbl imp"><thead><tr><th>Line</th><th>Customer</th><th>Class</th><th>Due</th><th>Ready before</th><th>Ready after</th><th class="num">Moved</th><th>Status before → after</th></tr></thead><tbody>' +
+        rows.slice(0, 80).map(function (x) { var a = x.a, b = x.b;
+          return '<tr' + (x.kind === 'new' ? ' class="anchor"' : '') + '><td class="mono"><a href="#" data-find="' + X.esc(a.id) + '">' + X.esc(a.id) + '</a></td><td>' + X.esc(X.custName(a.cust)) + '</td><td>' + X.cls(a.cls, a.rush) + '</td><td class="mono">' + X.fmtD(a.due) + '</td>' +
+            '<td class="mono">' + (b ? (b.ready != null ? X.fmt(b.ready) : 'not in horizon') : '<span class="hint">new line</span>') + '</td><td class="mono">' + (a.ready != null ? X.fmt(a.ready) : 'not in horizon') + '</td>' +
+            '<td class="num mono ' + x.kind + '">' + (x.d == null ? '—' : (x.d > 0 ? '+' : '') + x.d.toFixed(1) + ' d') + '</td><td>' + (b ? X.badge(b.status) + ' → ' : '') + X.badge(a.status) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+        '<div class="note"><i class="fa-solid fa-circle-info"></i><span>The plan is re-run with and without this what-if from the same starting point (the plant at ' + X.fmt(X.ASOF) + '); every line whose ready date or status changed is listed, biggest move first.</span></div>';
+      card.style.display = '';
+      if (X.hashParam() === 'impact') card.scrollIntoView({ behavior: 'smooth' });
+    }, before, 'Re-planning without the latest what-if for comparison');
+  }
+  function table() {
+    var show = document.getElementById('f-show').value, cl = document.getElementById('f-cls').value, q = (document.getElementById('f-q').value || '').toLowerCase();
+    var list = R.lines.filter(function (x) {
+      if (x.norm) return false;
+      if (show === 'open' && (x.status === 'Done' || x.status === 'Cancelled')) return false;
+      if (show === 'late' && !(x.lateDays > 0 || x.status === 'Not in horizon')) return false;
+      if (show === 'done' && x.status !== 'Done') return false;
+      if (cl && x.cls !== cl) return false;
+      if (q) { var s = m.skus[x.skuId], hay = (x.id + ' ' + X.custName(x.cust) + ' ' + (s ? X.decor(s.decorId).name + ' ' + s.id : '')).toLowerCase(); if (hay.indexOf(q) < 0) return false; }
+      return true;
+    }).sort(function (a, b) { return a.due - b.due || (a.id < b.id ? -1 : 1); });
+    var n = Math.min(list.length, CAP + more);
+    document.getElementById('fc').innerHTML = (n < list.length ? n + ' of ' : '') + list.length + ' lines' + (n < list.length ? ' · <a href="#" id="more">show 300 more</a>' : '');
+    var h = '<thead><tr><th></th><th>Line</th><th>Customer</th><th>Class</th><th>Decor · SKU</th><th class="num">Ordered</th><th class="num">From stock</th><th class="num">Good made</th><th class="num">B-grade</th><th class="num">BTP</th><th>Due</th><th>Planned ready</th><th>Status</th></tr></thead><tbody>';
+    list.slice(0, n).forEach(function (x) {
+      var s = m.skus[x.skuId], d = s ? X.decor(s.decorId) : null, good = x.planH + x.planP - x.down;
+      h += '<tr' + (x.rush ? ' class="anchor"' : '') + ' data-id="' + X.esc(x.id) + '"><td><button class="exp-btn' + (open[x.id] ? ' open' : '') + '"><i class="fa-solid fa-chevron-' + (open[x.id] ? 'down' : 'right') + '"></i></button></td>' +
+        '<td class="mono strong">' + X.esc(x.id) + '</td><td>' + X.esc(X.custName(x.cust)) + '</td><td>' + X.cls(x.cls, x.rush) + '</td>' +
+        '<td>' + (s ? X.swatch(s.decorId) + ' ' + X.esc(d.name) + ' <span class="hint">' + X.esc(X.finishName(s.finishId) + ' · ' + s.mm + ' mm · ' + X.sizeLabel(s.sizeId)) + '</span>' : X.esc(x.skuId)) + (x.cutPlan ? ' <span class="chip" title="custom cut pieces">cut</span>' : '') + '</td>' +
+        '<td class="num mono">' + X.n(x.qty) + (x.cancelled ? '<div class="hint small">−' + X.n(x.cancelled) + ' cancelled</div>' : '') + (x.rejected ? '<div class="hint small">+' + X.n(x.rejected) + ' rejected</div>' : '') + '</td>' +
+        '<td class="num mono">' + (x.alloc ? X.n(x.alloc) : '—') + '</td><td class="num mono">' + (good ? X.n(good) : '—') + '</td><td class="num mono">' + (x.down ? '<span class="deviation">' + X.n(x.down) + '</span>' : '—') + '</td>' +
+        '<td class="num mono strong">' + X.n(x.btp) + '</td><td class="mono">' + X.fmtD(x.due) + '</td><td class="mono">' + (x.ready != null ? X.fmt(x.ready) : x.status === 'Cancelled' ? '—' : '<span class="deviation">after the horizon</span>') + '</td>' +
+        '<td>' + X.badge(x.status) + (x.lateDays > 0 ? ' <span class="hint small">+' + x.lateDays + ' d</span>' : '') + '</td></tr>';
+      if (open[x.id]) h += detail(x);
+    });
+    document.getElementById('tbl').innerHTML = h + '</tbody>';
+  }
+  function detail(x) {
+    var s = m.skus[x.skuId], cyc = x.cycles.map(function (i) { return R.cycles[i]; }).filter(Boolean), paper = X.by.papers[s.decorId] || {};
+    var fwd = cyc.filter(function (c) { return c.phase === 'P'; }), hist = cyc.filter(function (c) { return c.phase === 'H'; });
+    var good = x.planH - x.down;
+    return '<tr class="sub-detail"><td colspan="13"><div class="sub-wrap"><div class="grid3">' +
+      '<div><div class="sub-title">Eligibility from attributes</div><div class="elig">' + m.presses.map(function (p) { var ok = s.presses.indexOf(p.id) >= 0; return '<span class="e ' + (ok ? 'ok' : 'no') + '" title="' + X.esc(ok ? (m.nest(s.sizeId, p.bed) > 1 ? 'fits · 2 books per plate' : 'fits') : X.E.whyNot(m, s, p).join('; ')) + '">' + p.id + (ok ? ' ✓' : ' ✗') + '</span>'; }).join('') + '</div>' +
+      '<div class="small" style="margin-top:6px">Texture <b>' + X.esc(X.finishName(s.finishId)) + '</b> · mould health class <b>' + (x.cls === 'EXPORT' ? 'A (export grade)' : s.hc) + '</b> · cure band ' + X.esc((m.bandById[s.band] || {}).name) + ' · decor paper ' + X.esc(paper.source === 'IMPORT' ? 'imported (' + (X.by.suppliers[paper.supplierId] || {}).name + ')' : 'domestic') + (x.paperWait != null && x.paperWait >= X.ASOF ? ' · <span class="deviation">waited for paper from ' + X.fmt(x.paperWait) + '</span>' : '') + '</div></div>' +
+      '<div><div class="sub-title">Schedule — ' + hist.length + ' cycles made, ' + fwd.length + ' planned</div><div style="display:flex;gap:4px;flex-wrap:wrap">' +
+      cyc.slice(-24).map(function (c) { return '<a class="chip" href="loadbuilder.html#' + c.id + '" title="' + X.esc(X.fmt(c.s0)) + '">' + c.id + '</a>'; }).join('') + (cyc.length > 24 ? '<span class="hint">+' + (cyc.length - 24) + '</span>' : '') + '</div>' +
+      '<div class="small" style="margin-top:6px"><a href="schedule.html#' + encodeURIComponent(x.orderId) + '">Follow order ' + X.esc(x.orderId) + ' on the Press Gantt</a></div></div>' +
+      '<div><div class="sub-title">What-if on this line</div><div class="act small" style="display:flex;flex-direction:column;gap:6px">' +
+      '<div><button class="btn btn-ghost btn-sm" data-cancel="' + X.esc(x.orderId) + '"><i class="fa-solid fa-ban"></i> Cancel order ' + X.esc(x.orderId) + '</button></div>' +
+      '<div>QC downgrade <input type="number" min="1" max="' + good + '" value="' + Math.min(100, Math.max(1, good)) + '" id="dg-' + X.esc(x.id) + '"' + (good > 0 ? '' : ' disabled') + '> of ' + X.n(good) + ' good sheets made <button class="btn btn-ghost btn-sm" data-down="' + X.esc(x.id) + '"' + (good > 0 ? '' : ' disabled') + '>Downgrade</button></div>' +
+      '<div>Customer rejects <input type="number" min="1" value="50" id="rj-' + X.esc(x.id) + '"> sheets <button class="btn btn-ghost btn-sm" data-rej="' + X.esc(x.id) + '">Record rejection</button></div></div></div>' +
+      '</div></div></td></tr>';
+  }
+  document.getElementById('tbl').addEventListener('click', function (e) {
+    var t = e.target;
+    var c = t.closest('[data-cancel]'); if (c) { var oid = c.getAttribute('data-cancel'); X.replan(function () { X.addWhatif({ type: 'cancel', orderId: oid }); }, 'Re-planning without order ' + oid, render); return; }
+    var d = t.closest('[data-down]'); if (d) { var id = d.getAttribute('data-down'), n = +document.getElementById('dg-' + id).value; if (n > 0) X.replan(function () { X.addWhatif({ type: 'downgrade', lineId: id, sheets: n }); }, 'Re-planning after the QC downgrade', render); return; }
+    var j = t.closest('[data-rej]'); if (j) { var id2 = j.getAttribute('data-rej'), n2 = +document.getElementById('rj-' + id2).value; if (n2 > 0) X.replan(function () { X.addWhatif({ type: 'reject', lineId: id2, sheets: n2 }); }, 'Re-planning the replacement', render); return; }
+    var tr = t.closest('tr[data-id]'); if (tr && !t.closest('a')) { var lid = tr.getAttribute('data-id'); open[lid] = !open[lid]; table(); }
+  });
+  document.getElementById('wifs').addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (!b) return; var id = b.getAttribute('data-rm'); X.replan(function () { X.removeWhatif(id); }, 'Re-planning', render); });
+  document.getElementById('imp').addEventListener('click', function (e) { var a = e.target.closest('[data-find]'); if (!a) return; e.preventDefault(); document.getElementById('f-show').value = 'all'; document.getElementById('f-q').value = a.getAttribute('data-find'); open[a.getAttribute('data-find')] = true; table(); });
+  document.getElementById('rush').addEventListener('click', function () { X.replan(function () { X.addWhatif({ type: 'rush', order: X.D.scenarios.S1.order }); }, 'Inserting the rush export container', function (r) { render(r); document.getElementById('impcard').scrollIntoView({ behavior: 'smooth' }); }); });
+  ['f-show', 'f-cls'].forEach(function (id) { document.getElementById(id).addEventListener('change', function () { more = 0; table(); }); });
+  document.getElementById('f-q').addEventListener('input', function () { more = 0; table(); });
+  document.getElementById('fc').addEventListener('click', function (e) { if (e.target.id === 'more') { e.preventDefault(); more += 300; table(); } });
+  document.getElementById('xl').addEventListener('click', function () {
+    X.xlsx([{ name: 'Order lines', cols: ['Line', 'Order', 'Customer', 'Class', 'SKU', 'Decor', 'Finish', 'Thickness mm', 'Size', 'Ordered', 'Cancelled', 'Rejected', 'From stock', 'Good made', 'B-grade', 'BTP', 'Due', 'Planned ready', 'Status', 'Days late'],
+      widths: [16, 12, 30, 18, 30, 22, 16, 12, 12, 10, 10, 10, 10, 10, 10, 10, 18, 18, 16, 10],
+      rows: R.lines.filter(function (x) { return !x.norm; }).map(function (x) { var s = m.skus[x.skuId] || {}; return [x.id, x.orderId, X.custName(x.cust), X.CLS_LABEL[x.cls], x.skuId, s.decorId ? X.decor(s.decorId).name : '', X.finishName(s.finishId), s.mm, X.sizeLabel(s.sizeId), x.qty, x.cancelled, x.rejected, x.alloc, x.planH + x.planP - x.down, x.down, x.btp, X.fmt(x.due), x.ready != null ? X.fmt(x.ready) : 'after horizon', x.status, x.lateDays]; }) }],
+      'Merino_order_book_BTP_' + X.yymmdd(X.ASOF) + '.xlsx');
+  });
+  var hp = X.hashParam(); if (hp && hp !== 'impact' && hp !== 'btp') { document.getElementById('f-show').value = 'all'; document.getElementById('f-q').value = hp; open[hp] = true; }
+  X.withPlan(render); X.whenPlanChanges(render);
+</script>
+</body>
+</html>

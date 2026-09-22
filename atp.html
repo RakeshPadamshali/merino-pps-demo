@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ATP & Capacity · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .pick { display:grid; grid-template-columns:repeat(9,auto); gap:6px 10px; align-items:end; }
+  .pick label { display:flex; flex-direction:column; gap:3px; font-size:10px; text-transform:uppercase; letter-spacing:.3px; color:var(--color-text-muted); font-weight:600; }
+  .pick input, .pick select { font:12px 'Roboto'; padding:5px 7px; border:1px solid var(--color-border); border-radius:5px; background:#fff; color:var(--color-text-primary); text-transform:none; letter-spacing:0; font-weight:400; }
+  .chain { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12px; } .chain .f { background:#f6f8fa; border:1px solid var(--color-border-light); border-radius:6px; padding:4px 8px; text-align:center; }
+  .chain .f b { display:block; font-size:15px; } .chain .f span { font-size:10px; color:var(--color-text-hint); } .chain .op { color:#8a93a0; font-weight:700; }
+  tr.best td { background:#f1f8fe; } .elig { display:flex; gap:4px; flex-wrap:wrap; } .elig .e { font-size:11px; padding:3px 7px; border-radius:4px; border:1px solid var(--color-border); } .elig .e.ok { background:#e8f5e9; border-color:#c8e6c9; color:#2e7d32; } .elig .e.no { color:#8a93a0; }
+  .deck { background:#fff8e1; border:1px solid #ffe082; border-radius:6px; padding:6px 10px; font-size:11.5px; color:#6d4c00; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>ATP &amp; Capacity — what a press can make, and when we can promise it</h1><div class="crumb">Planning › ATP &amp; Capacity › <span id="ctx"></span></div></div>
+    <div class="actions"><a class="btn btn-outline btn-sm" href="masters.html#skus"><i class="fa-solid fa-database"></i> SKU master</a></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-sliders"></i> Product — by attributes, not by a SKU lookup table <span class="right" id="skuinfo"></span></div>
+    <div class="card-body">
+      <div class="pick">
+        <label>Decor<input id="decor" list="decors" size="22"><datalist id="decors"></datalist></label>
+        <label>Finish (texture)<select id="finish"></select></label>
+        <label>Thickness<select id="mm"></select></label>
+        <label>Size<select id="size"></select></label>
+        <label>Grade<select id="grade"></select></label>
+        <label>Sides<select id="sides"><option value="S">Single</option><option value="D">Double</option></select></label>
+        <label>Quantity (sheets)<input id="qty" type="number" value="5000" min="1" style="width:100px"></label>
+        <label>Class<select id="cls"><option value="DOM_COMMITTED">Committed domestic</option><option value="EXPORT">Export</option></select></label>
+        <label>Wanted by<input id="want" type="date"></label>
+      </div>
+      <div class="deck" style="margin-top:10px"><i class="fa-solid fa-lightbulb"></i> Opens on the proposal's worked example: <b>5,000 sheets of an 8 ft, 1 mm woodgrain</b>, committed domestic. The proposal works it out as 13 daylights × 8 moulds × 2 = 208 sheets a cycle, 19 cycles a day at 22 h × 90 % ÷ 60 min, 3,952 sheets a day, 1.3 → 2 press-days. The table below does the same arithmetic for every press this product can go on.</div>
+    </div>
+  </div>
+  <div class="grid-1-2">
+    <div class="card"><div class="card-head"><i class="fa-solid fa-circle-check"></i> Eligibility from attributes</div><div class="card-body" id="elig"></div></div>
+    <div class="card"><div class="card-head"><i class="fa-solid fa-calculator"></i> Capacity at daylight × plate × cycle level — the worked example</div><div class="card-body"><div id="chain"></div><div class="note" style="margin-top:10px"><i class="fa-solid fa-circle-info"></i><span>Sheets a cycle = daylights × moulds per daylight (set by the cure band) × laminates per mould (2 single-sided, 1 double-sided) × books per plate (2 when two books fit the bed length). Cycles a day = 22 running hours × 90 % efficiency ÷ press minutes. Changeovers and cleaning passes come on top — the ATP quote below includes them.</span></div></div></div>
+  </div>
+  <div class="card"><div class="card-head"><i class="fa-solid fa-industry"></i> The same arithmetic for every press this product can go on <span class="right hint" id="capmeta"></span></div><div class="card-body"><div class="tbl-wrap"><table class="tbl" id="cap"></table></div></div></div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-calendar-check"></i> Available-to-promise — against the live plan <span class="right"><button class="btn btn-primary btn-sm" id="quote"><i class="fa-solid fa-play"></i> Quote a promise date</button><button class="btn btn-outline btn-sm" id="commit" disabled><i class="fa-solid fa-check"></i> Book it as an order line</button></span></div>
+    <div class="card-body" id="atp"><div class="empty-state">The quote re-plans the whole press shop with this line added at its priority — it does not just look for spare hours — so the date respects every mould, paper and cure-band rule and shows who would move.</div></div>
+  </div>
+  <div class="card"><div class="card-head"><i class="fa-solid fa-table-cells"></i> Press × cure band capacity (single-sided, one book per plate)</div><div class="card-body"><div class="tbl-wrap"><table class="tbl" id="matrix"></table></div><div class="note"><i class="fa-solid fa-circle-info"></i><span>Capacity is never a flat machine-hours number: a thin HPL load and a 25 mm compact load on the same press differ by a factor of forty in sheets per day, a double-sided sheet halves the plate yield, and on the 16 ft press two 8 ft books share a plate. Available-to-promise uses exactly these numbers.</span></div></div></div>
+</main></div>
+<script>window.MER_PAGE='atp'; window.MER_TITLE='ATP & Capacity'; window.MER_ICON='fa-calculator';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script>
+<script>
+  var X = window.MERX, D = X.D, m = null, quote = null;
+  var $ = function (id) { return document.getElementById(id); };
+  function init() {
+    m = X.model();
+    $('ctx').textContent = m.presses.length + ' presses · ' + m.skuList.length + ' SKUs from attributes';
+    $('decors').innerHTML = D.m.decors.map(function (d) { return '<option value="' + d.id + ' · ' + X.esc(d.name) + '">'; }).join('');
+    $('finish').innerHTML = D.m.finishes.map(function (f) { return '<option value="' + f.id + '">' + X.esc(f.name) + '</option>'; }).join('');
+    $('mm').innerHTML = D.m.thicknesses.map(function (t) { return '<option value="' + t.mm + '">' + t.mm + ' mm</option>'; }).join('');
+    $('size').innerHTML = D.m.sizes.map(function (s) { return '<option value="' + s.id + '">' + X.esc(s.label) + ' · ' + s.lenMm + '×' + s.widMm + '</option>'; }).join('');
+    $('grade').innerHTML = D.m.grades.map(function (g) { return '<option value="' + g.id + '">' + g.id + ' · ' + X.esc(g.name) + '</option>'; }).join('');
+    var d0 = X.dateOf(X.ASOF + 7 * 1440); $('want').value = d0.getFullYear() + '-' + String(d0.getMonth() + 1).padStart(2, '0') + '-' + String(d0.getDate()).padStart(2, '0');
+    // default: the proposal's worked example — a popular 8 ft, 1 mm woodgrain (or the new SKU of scenario S7 when opened from the launcher)
+    var h = X.hashParam(), pick = null;
+    if (h && m.skus[h]) pick = m.skus[h];
+    // the example woodgrain is the one with the most decor paper to spare, so the quote shows press capacity, not a paper shortage
+    if (!pick) pick = m.skuList.filter(function (s) { return s.sizeId === 'S84' && s.mm === 1 && s.family === 'WDG' && s.gradeId === 'GP' && s.sides === 'S'; })
+      .sort(function (a, b) { return paperInfo(b.decorId).head - paperInfo(a.decorId).head || (a.id < b.id ? -1 : 1); })[0];
+    setPick(pick);
+    matrix();
+    ['decor', 'finish', 'mm', 'size', 'grade', 'sides', 'qty', 'cls', 'want'].forEach(function (id) { $(id).addEventListener('change', function () { quote = null; $('commit').disabled = true; calc(); }); });
+    calc();
+  }
+  // decor paper for the next 21 days: stock at the as-of + open POs landing in the horizon − what the live plan still has to press on it
+  function paperInfo(dec) {
+    var R = X.cachedPlan(X.settings()), stock = Math.max(0, (X.hist().state.paper || {})[dec] || 0), need = 0;
+    var pos = m.pos.filter(function (p) { return p.decorId === dec && p.eta > X.ASOF; });
+    var inH = pos.filter(function (p) { return p.eta <= X.END; }).reduce(function (a, p) { return a + p.sheets; }, 0);
+    if (R) R.lines.forEach(function (x) { var k = m.skus[x.skuId]; if (k && k.decorId === dec && x.status !== 'Cancelled') need += (x.planP + x.rem) * k.faces; });
+    return { stock: stock, pos: pos, inH: inH, need: need, head: stock + inH - need };
+  }
+  function setPick(s) { if (!s) return; $('decor').value = s.decorId + ' · ' + X.decor(s.decorId).name; $('finish').value = s.finishId; $('mm').value = String(s.mm); $('size').value = s.sizeId; $('grade').value = s.gradeId; $('sides').value = s.sides; }
+  function attrs() {
+    var dec = ($('decor').value || '').split(' · ')[0].trim(), mm = +$('mm').value, sides = $('sides').value, fin = $('finish').value, f = m.finishes[fin] || {}, d = m.decors[dec];
+    var s = { id: dec + '-' + fin + '-' + mm + '-' + $('size').value.slice(1) + '-' + $('grade').value + (sides === 'D' ? '-DS' : ''), decorId: dec, finishId: fin, mm: mm, sizeId: $('size').value, gradeId: $('grade').value, sides: sides };
+    s.band = m.bandOf(mm); s.family = f.familyId; s.shade = d ? d.shade : 5; s.faces = sides === 'D' ? 2 : 1; s.lam = sides === 'D' ? 1 : 2;
+    var fc = (m.families[s.family] || {}).healthClass || 'C'; if (d && d.family === 'SOLID' && d.shade >= 8) fc = 'A'; else if (d && d.family === 'SOLID' && fc === 'C') fc = 'B'; s.hc = fc;
+    s.presses = X.E.eligible(m, s); s.inCatalogue = !!m.skus[s.id]; s.valid = !!d && !!m.finishes[fin] && !!s.band;
+    return s;
+  }
+  function paperLine(s, q) {
+    var pi = paperInfo(s.decorId), want = q * s.faces, nx = pi.pos[0];
+    return '<span class="mono">' + X.n(pi.stock) + '</span> sheets in stock' + (pi.inH ? ' + <span class="mono">' + X.n(pi.inH) + '</span> on POs landing in the horizon' : '') + ' − <span class="mono">' + X.n(pi.need) + '</span> already planned = ' +
+      '<b class="' + (pi.head >= want ? '' : 'deviation') + '">' + X.n(Math.max(0, pi.head)) + ' free</b> for this ' + X.n(want) + (pi.head >= want ? '' : ' — paper limits the quote' + (nx ? '; next PO ' + X.esc(nx.id) + ' lands ' + X.fmtD(nx.eta) + (nx.eta > X.END ? ' (after the horizon)' : '') : '; no open PO'));
+  }
+  function calc() {
+    var s = attrs(), q = Math.max(1, +$('qty').value || 1);
+    $('skuinfo').innerHTML = s.valid ? '<span class="mono">' + X.esc(s.id) + '</span> ' + (s.inCatalogue ? '<span class="badge b-green">in the SKU master</span>' : '<span class="badge b-amber">not in the catalogue yet — eligibility still follows from its attributes</span>') : '<span class="badge b-red">pick a decor from the list</span>';
+    if (!s.valid) { $('elig').innerHTML = ''; $('cap').innerHTML = ''; $('chain').innerHTML = ''; return; }
+    var cls = $('cls').value, hc = cls === 'EXPORT' ? 'A' : s.hc;
+    $('elig').innerHTML = '<div class="elig">' + m.presses.map(function (p) { var ok = s.presses.indexOf(p.id) >= 0, why = ok ? (m.nest(s.sizeId, p.bed) > 1 ? 'fits · two books per plate' : 'fits') : X.E.whyNot(m, s, p).join('; ');
+        return '<span class="e ' + (ok ? 'ok' : 'no') + '" title="' + X.esc(why) + '">' + p.id + ' ' + (ok ? '✓' : '✗') + '<div class="hint" style="font-size:9.5px">' + X.esc(ok ? why : why.split(';')[0]) + '</div></span>'; }).join('') + '</div>' +
+      '<div class="kv" style="margin-top:10px"><div class="k">Cure band</div><div class="v">' + X.esc((m.bandById[s.band] || {}).name) + ' (' + s.band + ')</div><div class="k">Mould family</div><div class="v">' + X.esc((m.families[s.family] || {}).name || s.family) + ' — texture ' + X.esc(X.finishName(s.finishId)) + '</div>' +
+      '<div class="k">Mould health needed</div><div class="v">class ' + hc + ' — ≥ ' + X.pct(m.health[hc], 0) + ' of life left' + (cls === 'EXPORT' ? ' (export grade)' : '') + '</div>' +
+      '<div class="k">Mould sets of this texture</div><div class="v">' + ([8, 14, 16].map(function (b) { var ss = m.setsByKey[s.finishId + '|' + b] || []; return ss.length ? b + ' ft: ' + ss.map(function (x) { return x.id + (x.dedicatedTo ? ' (dedicated)' : ''); }).join(', ') : null; }).filter(Boolean).join(' · ') || '<span class="deviation">none</span>') + '</div>' +
+      '<div class="k">Decor paper</div><div class="v">' + X.esc(((X.by.papers[s.decorId] || {}).source === 'IMPORT' ? 'imported · ' : 'domestic · ') + ((X.by.suppliers[(X.by.papers[s.decorId] || {}).supplierId] || {}).name || '')) + '<br>' + paperLine(s, q) + '</div></div>';
+    var rows = s.presses.map(function (pid) {
+      var p = m.pressById[pid], B = m.bandById[s.band], nest = m.nest(s.sizeId, p.bed), per = p.dl * B.ppd * s.lam * nest, cyc = Math.floor((1440 - p.downDur) / B.eff), day = cyc * per;
+      var sets = (m.setsByKey[s.finishId + '|' + p.bed] || []).length;
+      return { p: p, B: B, nest: nest, per: per, cyc: cyc, day: day, pd: q / day, sets: sets };
+    }).sort(function (a, b) { return b.day - a.day; });
+    if (!rows.length) { $('cap').innerHTML = '<tbody><tr><td class="deviation">No press can make this combination — see the reasons on the left.</td></tr></tbody>'; $('chain').innerHTML = ''; return; }
+    var ex = rows.filter(function (r) { return r.p.dl === 13 && r.nest === 1; })[0] || rows[0];
+    $('chain').innerHTML = '<div class="chain"><div class="f"><b>' + ex.p.dl + '</b><span>daylights (' + ex.p.id + ')</span></div><span class="op">×</span><div class="f"><b>' + ex.B.ppd + '</b><span>moulds / daylight</span></div><span class="op">×</span><div class="f"><b>' + s.lam + '</b><span>laminates / mould</span></div>' + (ex.nest > 1 ? '<span class="op">×</span><div class="f"><b>' + ex.nest + '</b><span>books / plate</span></div>' : '') +
+      '<span class="op">=</span><div class="f"><b>' + ex.per + '</b><span>sheets / cycle</span></div><span class="op">·</span><div class="f"><b>' + ex.cyc + '</b><span>cycles / day (22 h × 90% ÷ ' + ex.B.pressMin + ' min)</span></div><span class="op">=</span><div class="f"><b>' + X.n(ex.day) + '</b><span>sheets / day</span></div><span class="op">→</span><div class="f"><b>' + ex.pd.toFixed(1) + ' → ' + Math.ceil(ex.pd) + '</b><span>press-days for ' + X.n(q) + '</span></div></div>';
+    $('capmeta').textContent = rows.length + ' eligible press' + (rows.length > 1 ? 'es' : '');
+    $('cap').innerHTML = '<thead><tr><th>Press</th><th class="num">Daylights × moulds × laminates × books</th><th class="num">Sheets / cycle</th><th class="num">Cycle (at 90%)</th><th class="num">Cycles / day</th><th class="num">Sheets / day</th><th class="num">Press-days for ' + X.n(q) + '</th><th class="num">Mould sets</th></tr></thead><tbody>' +
+      rows.map(function (r, i) { return '<tr class="' + (i === 0 ? 'best' : '') + '"><td class="strong">' + r.p.name + ' <span class="hint">' + r.p.bed + ' ft</span></td><td class="num mono">' + r.p.dl + ' × ' + r.B.ppd + ' × ' + s.lam + ' × ' + r.nest + (r.nest > 1 ? ' <span class="chip">nested</span>' : '') + '</td><td class="num mono strong">' + r.per + '</td><td class="num mono">' + r.B.eff + ' min</td><td class="num mono">' + r.cyc + '</td><td class="num mono strong">' + X.n(r.day) + '</td><td class="num mono">' + r.pd.toFixed(2) + ' → ' + Math.ceil(r.pd) + '</td><td class="num mono">' + r.sets + '</td></tr>'; }).join('') + '</tbody>';
+  }
+  // press x cure band: sheets a day for a single-sided laminate, one book per plate (compact bands only where the press can run them)
+  function matrix() {
+    $('matrix').innerHTML = '<thead><tr><th>Press</th><th class="num">Bed · daylights</th>' + m.bands.map(function (b) { return '<th class="num">' + X.esc(b.id) + ' · ' + b.lo + (b.hi !== b.lo ? '–' + b.hi : '') + ' mm<div class="hint" style="font-weight:400;text-transform:none">' + b.pressMin + ' min · ' + b.ppd + ' plate' + (b.ppd > 1 ? 's' : '') + ' / DL</div></th>'; }).join('') + '</tr></thead><tbody>' +
+      m.presses.map(function (p) {
+        return '<tr><td class="strong">' + X.esc(p.name) + '</td><td class="num mono">' + p.bed + ' ft · ' + p.dl + '</td>' + m.bands.map(function (b) {
+          if (b.lo >= 2 && !p.compact) return '<td class="num hint" title="compact (2 mm and up) is not run on this press">not compact</td>';
+          var per = p.dl * b.ppd * 2, cyc = Math.floor((1440 - p.downDur) / b.eff);
+          return '<td class="num mono"><b>' + X.n(per * cyc) + '</b><div class="hint">' + per + ' / cycle × ' + cyc + '</div></td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody>';
+  }
+  $('quote').addEventListener('click', function () {
+    var s = attrs(); if (!s.valid || !s.presses.length) { X.toast('Pick a product a press can make first', 'fa-triangle-exclamation'); return; }
+    var q = Math.max(1, +$('qty').value || 1), want = new Date($('want').value + 'T18:00:00'), dueMin = Math.round((want - X.BASE) / 60000);
+    var line = { id: 'ATP-' + Date.now().toString(36).toUpperCase() + '/10', orderId: 'ATP-QUOTE', skuId: s.id, qty: q, margin: $('cls').value === 'EXPORT' ? 460 : 260, cls: $('cls').value, customerId: null, orderDate: X.D.meta.asOf, due: X.isoLocal(want) };
+    var st = X.settings(), ov = X.State.get('masters', {});
+    if (!s.inCatalogue) { ov = JSON.parse(JSON.stringify(ov)); ov.skus = ov.skus || { kf: 'id', rows: [] }; ov.skus.rows = ov.skus.rows.concat([{ id: s.id, decorId: s.decorId, finishId: s.finishId, mm: s.mm, sizeId: s.sizeId, gradeId: s.gradeId, sides: s.sides }]); }
+    X.busy(true, 'Re-planning with ' + X.n(q) + ' sheets added');
+    setTimeout(function () {
+      try {
+        var m2 = X.E.prepare(X.D, ov), r = X.E.plan(m2, X.hist(), { preset: st.preset, weights: st.weights, whatifs: st.whatifs.concat([{ type: 'addLine', line: line }]) });
+        quote = { line: line, s: s, r: r, ov: ov };
+        var L = r.byId[line.id], cyc = L ? L.cycles.map(function (i) { return r.cycles[i]; }) : [];
+        var presses = {}; cyc.forEach(function (c) { presses[c.p] = (presses[c.p] || 0) + 1; });
+        var base = X.cachedPlan(st), dl = base ? base.kpi : null;
+        $('atp').innerHTML = !L ? '<div class="deviation">The line could not be planned.</div>' :
+          '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">' +
+          '<div class="kpi ' + (L.ready != null && L.ready <= dueMin ? 'green' : 'red') + '"><div class="k">Promise date</div><div class="v" style="font-size:17px">' + (L.ready != null ? X.fmtD(L.ready) : 'part only') + '</div><div class="s">' + (L.ready != null ? (L.ready <= dueMin ? 'meets ' + X.fmtD(dueMin) : (Math.ceil((L.ready - dueMin) / 1440)) + ' d after the wanted date') : X.n(L.planP) + ' of ' + X.n(q) + ' sheets inside the horizon') + '</div></div>' +
+          '<div class="kpi blue"><div class="k">First sheet pressed</div><div class="v" style="font-size:17px">' + X.fmt(L.firstStart) + '</div><div class="s">+ ' + X.D.cfg.finishingDays + ' day trim, back-sand and QC</div></div>' +
+          '<div class="kpi blue"><div class="k">Press cycles</div><div class="v" style="font-size:17px">' + cyc.length + '</div><div class="s">' + Object.keys(presses).sort().map(function (k) { return k + ' ×' + presses[k]; }).join(' · ') + '</div></div>' +
+          '<div class="kpi ' + (dl && r.kpi.late > dl.late ? 'amber' : 'green') + '"><div class="k">Other lines moved late</div><div class="v" style="font-size:17px">' + (dl ? Math.max(0, r.kpi.late - dl.late) : '—') + '</div><div class="s">OTIF ' + (dl ? X.pct(dl.otif, 1) + ' → ' : '') + X.pct(r.kpi.otif, 1) + '</div></div>' +
+          '<div class="kpi grey"><div class="k">Delay cost</div><div class="v" style="font-size:17px">' + (dl ? X.rs(dl.delayCost) + ' → ' : '') + X.rs(r.kpi.delayCost) + '</div><div class="s">whole plan, Rs per line-day late</div></div></div>' +
+          explain(L, q, s, dueMin) +
+          '<div class="small">Cycles: ' + cyc.slice(0, 30).map(function (c) { return '<span class="chip mono">' + c.id + ' · ' + X.fmt(c.s0) + '</span>'; }).join(' ') + (cyc.length > 30 ? ' …' : '') + '</div>';
+        $('commit').disabled = false;
+      } finally { X.busy(false); }
+    }, 30);
+  });
+  function explain(L, q, s, dueMin) {
+    var made = L.planP, out = [];
+    if (L.rem > 0) {
+      var nx = m.pos.filter(function (p) { return p.decorId === s.decorId && p.eta > X.ASOF; })[0];
+      if (L.paperWait != null) out.push('<b>Limited by decor paper, not by the presses:</b> ' + X.n(made) + ' of ' + X.n(q) + ' sheets can be pressed from the paper in stock and on order; the other ' + X.n(L.rem) + ' wait for paper' + (nx ? ' — next PO ' + X.esc(nx.id) + ' lands ' + X.fmtD(nx.eta) + (nx.eta > X.END ? ', after the ' + X.D.meta.forwardDays + '-day horizon' : '') : ' — there is no open PO for this decor') + '. Quote the part quantity, or raise a paper PO first.');
+      else out.push('<b>The horizon is full at this priority:</b> ' + X.n(made) + ' of ' + X.n(q) + ' sheets fit in the next ' + X.D.meta.forwardDays + ' days. Raise the class to Export, or quote the part quantity.');
+    } else if (L.ready <= dueMin) out.push('<b>Promise holds:</b> all ' + X.n(q) + ' sheets are pressed in ' + L.cycles.length + ' cycles and ready after trimming and QC on ' + X.fmtD(L.ready) + '. The date already respects every mould set, paper stock, cure-band and changeover rule — it is where the line lands in the full re-plan.');
+    else out.push('<b>Earliest honest date is ' + X.fmtD(L.ready) + ', ' + Math.ceil((L.ready - dueMin) / 1440) + ' d after the wanted date:</b> at this class the line queues behind committed work already on the eligible presses. Quote the later date, or book it as Export to pull it forward — the re-plan shows which lines would then move.');
+    return '<div class="note" style="margin:8px 0"><i class="fa-solid fa-circle-info"></i><span>' + out.join(' ') + '</span></div>';
+  }
+  $('commit').addEventListener('click', function () {
+    if (!quote) return;
+    var q = quote, oid = 'SO' + X.yymmdd(X.ASOF).slice(0, 2) + '-ATP' + String(Date.now()).slice(-4), line = Object.assign({}, q.line, { id: oid + '/10', orderId: oid });
+    X.replan(function () {
+      if (!q.s.inCatalogue) X.State.set('masters', q.ov);
+      X.addWhatif({ type: 'addLine', line: line });
+    }, 'Booking the line into the live plan', function () { X.toast('Order line ' + line.id + ' booked — it is in the Order Book, the Gantt and every page'); $('commit').disabled = true; });
+  });
+  X.withPlan(function () { if (!m) init(); });
+  X.whenPlanChanges(function () { m = X.model(); matrix(); calc(); });
+</script>
+</body>
+</html>

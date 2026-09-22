@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Press Schedule · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .ctl { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .ctl select, .ctl input { font:12px 'Roboto'; padding:4px 8px; border:1px solid var(--color-border); border-radius:5px; }
+  .seg { display:inline-flex; border:1px solid var(--color-border); border-radius:6px; overflow:hidden; }
+  .seg button { border:none; background:#fff; padding:5px 10px; font:12px 'Roboto'; cursor:pointer; color:var(--color-text-secondary); } .seg button + button { border-left:1px solid var(--color-border); }
+  .seg button.on { background:var(--color-primary-light); color:var(--color-primary-dark); font-weight:600; }
+  .tbl-wrap { max-height:420px; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Press Schedule — every press cycle, P1 to P6</h1><div class="crumb">Scheduling › Press Schedule › <span id="ctx"></span></div></div>
+    <div class="actions"><a class="btn btn-outline btn-sm" href="loadbuilder.html"><i class="fa-solid fa-layer-group"></i> Press Load Builder</a><a class="btn btn-outline btn-sm" href="moulds.html"><i class="fa-solid fa-clone"></i> Mould Board</a></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-chart-gantt"></i> Press Gantt <span class="right" id="pager"></span></div>
+    <div class="card-body">
+      <div class="ctl" style="margin-bottom:10px">
+        <span class="fl" style="font-size:10px;text-transform:uppercase;font-weight:600;color:var(--color-text-muted)">Colour by</span>
+        <span class="seg" id="mode"><button data-m="status" class="on">On time vs late</button><button data-m="cls">Order class</button><button data-m="band">Cure band</button><button data-m="order">One order</button></span>
+        <span id="orderbox" style="display:none"><input id="order" list="orders" placeholder="order e.g. EX26-0012" size="18"><datalist id="orders"></datalist></span>
+        <span class="legend" id="legend" style="margin-left:auto"></span>
+      </div>
+      <div class="gantt" id="gantt"></div>
+      <div class="note"><i class="fa-solid fa-circle-info"></i><span>One bar per <b>press cycle</b>; the grey hatched sliver before a bar is its changeover (daylight plate swaps, cure-band change), hatched red is planned maintenance or a breakdown. The faded part left of <b>now</b> is what actually ran — planned the way Merino plans today; from now on it is the live plan. <b>On time vs late</b> colours a cycle by the worst delivery outcome of the order lines it carries; <b>One order</b> follows a single order across presses and days. Click a cycle to open it in the Press Load Builder.</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-table-list"></i> Cycles in this window <span class="right" id="tmeta"></span></div>
+    <div class="card-body"><div class="tbl-wrap"><table class="tbl" id="tbl"></table></div></div>
+  </div>
+</main></div>
+<script>window.MER_PAGE='schedule'; window.MER_TITLE='Press Schedule'; window.MER_ICON='fa-chart-gantt';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script>
+<script>
+  var X = window.MERX, R = null, m = null, mode = 'status', win = null, pg = null, pick = '';
+  var ST = { ok: X.COLOR.status.good, tight: X.COLOR.status.warning, late: X.COLOR.status.critical };
+  function cycleInfo(c) {   // status / dominant class of a cycle from the lines it carries
+    var worst = 'ok', byCls = {}, orders = {}, lines = 0;
+    c.rows.forEach(function (rw) { rw.pl.forEach(function (x) {
+      var ln = R.byId[x[0]]; lines++;
+      var cl = ln ? (ln.rush ? 'EXPORT' : ln.cls) : 'NORM'; byCls[cl] = (byCls[cl] || 0) + x[1];
+      if (ln && ln.orderId) orders[ln.orderId] = 1;
+      if (ln && !ln.norm && (ln.cls === 'EXPORT' || ln.cls === 'DOM_COMMITTED')) {
+        if (ln.lateDays > 0) worst = 'late'; else if (worst !== 'late' && ln.ready != null && ln.due - ln.ready < 1440) worst = 'tight';
+      }
+    }); });
+    var dom = Object.keys(byCls).sort(function (a, b) { return byCls[b] - byCls[a]; })[0] || 'NORM';
+    return { worst: worst, dom: dom, orders: orders, lines: lines };
+  }
+  function render(r) {
+    R = r; m = r.m;
+    var k = r.kpi, st = X.settings();
+    document.getElementById('ctx').textContent = r.cycles.length - r.nHist + ' planned cycles from ' + X.fmt(X.ASOF);
+    document.getElementById('kpis').innerHTML = [
+      ['Planned cycles', X.n(k.cycles), 'next ' + X.D.meta.forwardDays + ' days, 6 presses', 'blue'],
+      ['Sheets planned', X.n(k.sheets), X.pct(k.fill, 0) + ' of plates filled', 'green'],
+      ['Press utilisation', X.pct(k.util, 0), 'running time over available time', 'blue'],
+      ['Changeover time', X.dur(k.chgMin), k.swaps + ' daylight swaps · ' + k.bandChanges + ' cure-band changes', 'amber'],
+      ['Cleaning passes', X.n(k.cleaning), 'daylights resetting light-to-dark', 'grey'],
+      ['OTIF (plan)', X.pct(k.otif, 1), k.onTime + ' of ' + k.dueIn + ' committed lines due in the horizon', k.otif >= 0.85 ? 'green' : 'amber']
+    ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');
+    var dl = document.getElementById('orders'); if (!dl.options.length) dl.innerHTML = X.D.orders.map(function (o) { return '<option value="' + o.id + '">' + X.esc(X.custName(o.customerId)) + '</option>'; }).join('');
+    if (!pg) pg = X.pager(document.getElementById('pager'), function (w) { win = w; draw(); }, { days: 3, from: 0, to: X.END });
+    else draw();
+  }
+  function draw() {
+    if (!R || !win) return;
+    var lanes = m.presses.map(function (p) { return { id: p.id, label: p.name, sub: p.bed + ' ft · ' + p.dl + ' DL' }; }), bars = [], rows = [];
+    var hot = pick ? R.lines.filter(function (l) { return l.orderId === pick; }).map(function (l) { return l.id; }) : [];
+    // downtime + breakdowns
+    for (var d = Math.floor(win.startMin / 1440) - 1; d * 1440 < win.endMin; d++) m.presses.forEach(function (p) { var s = d * 1440 + p.downStart; bars.push({ lane: p.id, s: s, e: s + p.downDur, cls: 'down', tip: p.name + ' · planned maintenance & platen cleaning' }); });
+    m.breakdowns.forEach(function (b) { bars.push({ lane: b.press, s: b.s, e: b.e, cls: 'down', tip: 'Breakdown · ' + b.reason + ' (' + X.dur(b.e - b.s) + ')' }); });
+    R.cycles.forEach(function (c, i) {
+      if (c.end < win.startMin || c.start > win.endMin) return;
+      var inf = cycleInfo(c), hist = c.end <= X.ASOF, col, cls = hist ? 'hist' : '';
+      if (mode === 'status') col = hist ? X.COLOR.status.hist : ST[inf.worst];
+      else if (mode === 'cls') col = X.COLOR.cls[inf.dom];
+      else if (mode === 'band') col = X.COLOR.band[c.band];
+      else { var has = c.rows.some(function (rw) { return rw.pl.some(function (x) { return hot.indexOf(x[0]) >= 0; }); }); col = has ? X.COLOR.accent : '#e3e7eb'; cls += has ? ' hl' : ''; }
+      if (c.chg) bars.push({ lane: c.p, s: c.start, e: c.s0, cls: 'chg', tip: 'Changeover ' + X.dur(c.chg) + ' · ' + c.swaps + ' daylight swaps' + (c.bandChg ? ' + cure-band change' : '') });
+      bars.push({ lane: c.p, s: c.s0, e: c.end, color: col, cls: cls, id: c.id, label: X.n(c.sheets),
+        tip: c.id + ' · ' + X.fmt(c.s0) + ' → ' + X.fmtT(c.end) + '\n' + (m.bandById[c.band] || {}).name + ' · ' + X.n(c.sheets) + ' sheets · ' + Object.keys(inf.orders).length + ' orders\n' + (hist ? 'actual (history)' : inf.worst === 'late' ? 'carries a line that will be late' : inf.worst === 'tight' ? 'carries a line finishing within a day of its due date' : 'every committed line on time') });
+      rows.push([c, inf, hist]);
+    });
+    X.gantt(document.getElementById('gantt'), lanes, bars, { startMin: win.startMin, endMin: win.endMin, laneW: 150, laneTitle: 'Press', onClick: function (id) { location.href = 'loadbuilder.html#' + id; } });
+    var lg = mode === 'status' ? [['On time', ST.ok], ['Within a day of due', ST.tight], ['Late', ST.late], ['Actual (history)', X.COLOR.status.hist]]
+      : mode === 'cls' ? Object.keys(X.COLOR.cls).map(function (k) { return [X.CLS_LABEL[k], X.COLOR.cls[k]]; })
+      : mode === 'band' ? m.bands.map(function (b) { return [b.name + ' ' + b.lo + '–' + b.hi, X.COLOR.band[b.id]]; }) : [['Carries ' + (pick || 'the chosen order'), X.COLOR.accent], ['Other cycles', '#e3e7eb']];
+    document.getElementById('legend').innerHTML = lg.map(function (q) { return '<span><i style="background:' + q[1] + '"></i>' + X.esc(q[0]) + '</span>'; }).join('');
+    rows.sort(function (a, b) { return a[0].s0 - b[0].s0 || (a[0].p < b[0].p ? -1 : 1); });
+    var shown = rows.slice(0, 400);
+    document.getElementById('tmeta').textContent = rows.length + ' cycles' + (rows.length > shown.length ? ' · first 400 shown' : '');
+    document.getElementById('tbl').innerHTML = '<thead><tr><th>Cycle</th><th>Press</th><th>Start</th><th>End</th><th>Cure band</th><th class="num">Sheets</th><th class="num">Orders</th><th>Thicknesses</th><th class="num">Changeover</th><th>Delivery</th></tr></thead><tbody>' +
+      shown.map(function (q) { var c = q[0], inf = q[1];
+        return '<tr><td class="mono"><a href="loadbuilder.html#' + c.id + '">' + c.id + '</a></td><td>' + c.p + '</td><td class="mono">' + X.fmt(c.s0) + '</td><td class="mono">' + X.fmtT(c.end) + '</td><td>' + X.esc((m.bandById[c.band] || {}).name) + '</td><td class="num mono">' + X.n(c.sheets) + '</td><td class="num mono">' + Object.keys(inf.orders).length + '</td><td class="mono">' + c.thick.join(' / ') + ' mm</td><td class="num mono">' + (c.chg ? X.dur(c.chg) : '—') + '</td><td>' +
+          (q[2] ? '<span class="badge b-grey">Actual</span>' : inf.worst === 'late' ? '<span class="badge b-red"><i class="fa-solid fa-circle-exclamation"></i> Late line</span>' : inf.worst === 'tight' ? '<span class="badge b-amber"><i class="fa-solid fa-triangle-exclamation"></i> Tight</span>' : '<span class="badge b-green"><i class="fa-solid fa-circle-check"></i> On time</span>') + '</td></tr>'; }).join('') + '</tbody>';
+  }
+  document.getElementById('mode').addEventListener('click', function (e) { var b = e.target.closest('button[data-m]'); if (!b) return; mode = b.getAttribute('data-m'); document.querySelectorAll('#mode button').forEach(function (x) { x.classList.toggle('on', x === b); }); document.getElementById('orderbox').style.display = mode === 'order' ? '' : 'none'; if (mode === 'order' && !pick) { pick = (R.lines.filter(function (l) { return l.cls === 'EXPORT' && l.planP > 0; })[0] || {}).orderId || ''; document.getElementById('order').value = pick; } draw(); });
+  document.getElementById('order').addEventListener('change', function () { pick = this.value.trim(); draw(); });
+  window.addEventListener('resize', function () { draw(); });
+  var hp = X.hashParam(); if (hp) { mode = 'order'; pick = hp; setTimeout(function () { document.querySelector('#mode [data-m=order]').click(); document.getElementById('order').value = pick; }, 0); }
+  X.withPlan(render); X.whenPlanChanges(render);
+</script>
+</body>
+</html>

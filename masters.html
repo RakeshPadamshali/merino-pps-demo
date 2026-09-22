@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Master Data · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .mnav { display:flex; flex-direction:column; max-height:calc(100vh - 300px); overflow:auto; }
+  .mnav .g { font:700 10px 'Roboto'; letter-spacing:.5px; text-transform:uppercase; color:var(--color-text-hint); padding:9px 10px 3px; }
+  .mnav a { display:flex; align-items:center; gap:8px; padding:5px 10px; border-radius:6px; font-size:12px; color:var(--color-text-secondary); cursor:pointer; text-decoration:none; }
+  .mnav a:hover { background:#f1f5f8; } .mnav a.active { background:var(--color-primary-light); color:var(--color-primary-dark); font-weight:600; }
+  .mnav a .n { margin-left:auto; font-size:10px; color:var(--color-text-hint); font-variant-numeric:tabular-nums; }
+  .mnav a .eng { color:var(--brand); font-size:8px; }
+  #view .tbl-wrap { max-height:440px; } td.bool { text-align:center; } .ok { color:#2e9b45; } .no { color:#c2c8cf; }
+  .mx td.y { background:#e8f5e9; color:#2e7d32; text-align:center; font-weight:700; } .mx td.nn { background:#fafafa; color:#c2c8cf; text-align:center; }
+  .prev tr.ERROR td { background:#fff5f5; } .prev tr.NEW td { background:#f1f8f1; } .prev tr.UPDATE td { background:#fff8e1; }
+  .drop { border:2px dashed var(--color-border); border-radius:8px; padding:12px; text-align:center; color:var(--color-text-muted); font-size:12px; margin-top:10px; } .drop.over { border-color:var(--color-primary); background:var(--color-primary-light); }
+  .badge.b-new { background:#e8f5e9; color:#2e7d32; } .badge.b-upd { background:#fff8e1; color:#b25f00; }
+  .src { font-size:10px; padding:1px 6px; border-radius:4px; background:#eef2f5; color:#42556b; white-space:nowrap; }
+  .src.c { background:#e8f5e9; color:#2e7d32; }
+  .sub-title { font:600 11px 'Roboto'; text-transform:uppercase; letter-spacing:.3px; color:var(--color-text-muted); margin:6px 0; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Master Data — the plant, the product attributes and the planning rules</h1><div class="crumb">Masters › Master Data › <span id="ctx"></span></div></div>
+    <div class="actions"><span class="hint">Excel template · upload · validate · preview · apply — applied rows re-plan the press shop</span></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid-1-2" style="grid-template-columns:270px 1fr">
+    <div class="card"><div class="card-head"><i class="fa-solid fa-database"></i> Masters <span class="right" id="mcount"></span></div><div class="card-body mnav" id="mnav" style="padding:6px"></div></div>
+    <div>
+      <div class="card">
+        <div class="card-head"><i class="fa-solid fa-table"></i> <span id="mtitle"></span> <span class="right" id="mmeta"></span></div>
+        <div class="card-body">
+          <div class="filters"><span class="fl">Search</span><input id="q" placeholder="filter rows" size="18"><span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" id="sample" style="display:none"><i class="fa-solid fa-wand-magic-sparkles"></i> Load the scenario S7 row</button><button class="btn btn-outline btn-sm" id="dl"><i class="fa-solid fa-file-arrow-down"></i> Download template (.xlsx)</button><button class="btn btn-primary btn-sm" id="ul"><i class="fa-solid fa-file-arrow-up"></i> Upload from Excel</button><input type="file" id="file" accept=".xlsx,.xls,.csv" style="display:none"></span></div>
+          <div class="hint" id="mdesc" style="margin-bottom:8px"></div>
+          <div id="view"></div>
+          <div class="drop" id="drop"><i class="fa-solid fa-cloud-arrow-up"></i> Drop an .xlsx / .csv here or use <b>Upload from Excel</b> — rows are checked (required columns, unique key, references, numbers) and previewed before anything is applied.</div>
+        </div>
+      </div>
+      <div class="card" id="prevcard" style="display:none"><div class="card-head"><i class="fa-solid fa-list-check"></i> Upload preview — <span id="pfile"></span> <span class="right" id="pmeta"></span></div><div class="card-body"><div class="tbl-wrap" style="max-height:320px"><table class="tbl prev" id="prev"></table></div><div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn btn-success btn-sm" id="apply"><i class="fa-solid fa-check"></i> Apply valid rows and re-plan</button><button class="btn btn-outline btn-sm" id="cancel">Discard</button><span class="hint" id="pnote"></span></div></div></div>
+      <div class="card" id="skucard" style="display:none"><div class="card-head"><i class="fa-solid fa-wand-magic-sparkles"></i> What the new SKU inherited</div><div class="card-body" id="skunew"></div></div>
+      <div class="card"><div class="card-head"><i class="fa-solid fa-clock-rotate-left"></i> Master-data change log <span class="right hint">user · time · master · rows · what changed — Reset demo clears it</span></div><div class="card-body" id="audit"></div></div>
+    </div>
+  </div>
+</main></div>
+<script>window.MER_PAGE='masters'; window.MER_TITLE='Master Data'; window.MER_ICON='fa-database';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script><script src="assets/vendor/xlsx.full.min.js"></script>
+<script>
+  var X = window.MERX, D = X.D, esc = X.esc, $ = function (id) { return document.getElementById(id); };
+  // masters that the planning engine reads: an applied row re-plans the press shop
+  var ENGINE = { presses: 1, downtime: 1, cureBands: 1, sizes: 1, textureFamilies: 1, finishes: 1, decors: 1, grades: 1, customers: 1, mouldPolicy: 1, mouldSets: 1, changeover: 1, thicknessMix: 1, delayPenalty: 1, releaseWindow: 1, weights: 1, skus: 1, stockNorms: 1, papers: 1 };
+  var CAT = [
+    { grp: 'Plant & presses', items: [
+      { key: 'presses', title: 'Presses', req: ['id', 'name', 'bedFt', 'daylights'], desc: 'The six presses: bed size, daylights, running hours, efficiency and the capability flags that decide what each one may press (compact, gloss, special resin, exterior UV).' },
+      { key: 'bedSizes', title: 'Bed sizes', req: ['id', 'lenMm', 'widMm'], desc: 'Usable platen size per bed class; a product fits only if its length fits the bed (directional), and two books nest when the length fits twice.' },
+      { key: 'shifts', title: 'Shifts & crew', req: ['id', 'start', 'end'], desc: 'Shift calendar A / B / C with in-charge and relief — stamped on every cycle and work order.' },
+      { key: 'downtime', title: 'Planned downtime', req: ['id', 'pressId', 'start', 'durationMin'], refs: { pressId: 'presses' }, desc: 'The daily maintenance window per press (22 running hours), staggered so the shop never loses two presses at once.' },
+      { key: 'cureBands', title: 'Cure bands', req: ['id', 'name', 'thicknessMm', 'pressMin', 'platesPerDaylight'], desc: 'One cure profile per press cycle: thickness range, press minutes and how many plates a daylight takes. This is what makes capacity depend on the mix.' },
+      { key: 'bandPress', title: 'Cure band × press', req: ['id', 'bandId', 'pressId'], refs: { bandId: 'cureBands', pressId: 'presses' }, matrix: ['bandId', 'pressId', 'allowed'], desc: 'Which cure bands a press may run — compact bands only on the compact-capable presses.' },
+      { key: 'pressRules', title: 'Attribute rules', req: ['id', 'rule'], desc: 'The attribute restrictions behind eligibility: compact only on compact presses, gloss only where the polished plates are handled, FR / CR on the special-resin presses, exterior UV where the line exists.' }
+    ] },
+    { grp: 'Moulds', items: [
+      { key: 'mouldSets', title: 'Mould sets', req: ['id', 'finishId', 'bedFt', 'plates'], refs: { finishId: 'finishes', pressLock: 'presses' }, desc: 'Every set of press plates: its texture, the bed it is sized for, how many plates it has, its life limit and counter, and the customer it is dedicated to (with the press it is locked to).' },
+      { key: 'mouldPolicy', title: 'Mould policy', req: ['id', 'value'], desc: 'Life limit, refurbishment turnaround and the health thresholds that decide what a worn set may still press (class A / B / C).' },
+      { key: 'changeover', title: 'Changeover times', req: ['id', 'minutes'], desc: 'What a daylight texture swap and a cure-band change cost, and how a light-to-dark reset is taken (a cleaning pass).' },
+      { key: 'sequenceRules', title: 'Colour sequence rules', req: ['id', 'rule'], desc: 'Light-to-dark on a set, the cleaning-pass reset and the shade index the decors carry.' }
+    ] },
+    { grp: 'Product attributes & SKU', items: [
+      { key: 'textureFamilies', title: 'Texture families', req: ['id', 'name', 'healthClass'], desc: 'The eight families a finish belongs to, each with the mould-health class its look demands.' },
+      { key: 'finishes', title: 'Finishes (textures)', req: ['id', 'name', 'familyId'], refs: { familyId: 'textureFamilies' }, desc: 'The 36 textures. One finish = one mould family; a daylight carries one texture at a time.' },
+      { key: 'decors', title: 'Decors (designs)', req: ['id', 'name', 'shade'], desc: 'Every design with its family, shade index 1–10 (light to dark), colour and its decor paper.' },
+      { key: 'sizes', title: 'Sizes', req: ['id', 'label', 'lenMm', 'widMm'], desc: 'The eleven sheet sizes; the length decides which bed a sheet fits and whether two books nest on one plate.' },
+      { key: 'sizeFit', title: 'Size × bed fit', req: ['id', 'sizeId', 'bed'], refs: { sizeId: 'sizes' }, matrix: ['sizeId', 'bed', 'perPlate'], desc: 'Books per plate by size and bed — 0 where the sheet does not fit, 2 where two books nest.' },
+      { key: 'thicknesses', title: 'Thicknesses', req: ['id', 'mm', 'bandId'], refs: { bandId: 'cureBands' }, desc: 'The eighteen thicknesses with their cure band and the kraft plies a book needs — the book-building recipe.' },
+      { key: 'grades', title: 'Grades', req: ['id', 'name'], desc: 'General purpose, post-forming, anti-bacterial, fire retardant, chemical resistant, compact and exterior compact.' },
+      { key: 'skus', title: 'SKUs (attribute combinations)', req: ['id', 'decorId', 'finishId', 'mm', 'sizeId', 'gradeId'], refs: { decorId: 'decors', finishId: 'finishes', sizeId: 'sizes', gradeId: 'grades' }, desc: 'A SKU is only its attributes — decor, finish, thickness, size, grade, sides. Presses, mould sets, cure band and mould-health class are derived from those attributes, never mapped by hand, so a new SKU is runnable the moment it is uploaded.' }
+    ] },
+    { grp: 'Planning rules', items: [
+      { key: 'objectives', title: 'The five objectives', req: ['id', 'label'], desc: 'Profitability, committed dates, stock norms, changeovers, thickness mix — the five the plan balances.' },
+      { key: 'weights', title: 'Objective weight presets', req: ['id', 'label', 'mode'], desc: 'Merino today (the fixed sequence) and the weighted presets. Change a weight here or in the Objective Studio and the whole plan re-runs.' },
+      { key: 'delayPenalty', title: 'Delay penalty', req: ['id', 'rsPerLineDay'], desc: 'Rupees per line-day late by order class — what the plan is willing to pay to protect a committed date.' },
+      { key: 'releaseWindow', title: 'Release window', req: ['id', 'days'], desc: 'How many days before its due date a line may be pressed. Nobody presses a container order a month early: finished-goods space and working capital. The capacity left over goes to stock norms.' },
+      { key: 'thicknessMix', title: 'Thickness mix', req: ['id', 'value'], desc: 'Distinct thicknesses in one press load: the target the plan aims for and the hard cap book building can still handle.' },
+      { key: 'normBands', title: 'Stock-norm bands', req: ['id'], desc: 'The colour bands of the buffer: black, red, yellow, green, blue.' },
+      { key: 'stockNorms', title: 'Stock norms (make-to-stock SKUs)', req: ['id', 'skuId', 'normSheets', 'usePerDay'], refs: { skuId: 'skus' }, desc: 'The norm (buffer target) and daily draw per make-to-stock SKU, with the on-hand at the start of the record.' }
+    ] },
+    { grp: 'Materials & partners', items: [
+      { key: 'papers', title: 'Decor paper', req: ['id', 'decorId', 'supplierId', 'leadDays'], refs: { decorId: 'decors', supplierId: 'suppliers' }, desc: 'One paper per design: supplier, source, lead time, stock at the start of the record and reorder quantity. Paper gates the press.' },
+      { key: 'materials', title: 'Other materials', req: ['id', 'name', 'kind'], refs: { supplierId: 'suppliers' }, desc: 'Overlay, kraft, resins and consumables with stock and daily use.' },
+      { key: 'suppliers', title: 'Suppliers', req: ['id', 'name', 'country'], desc: 'Decor paper, kraft and resin suppliers with lead times and transit (fictional).' },
+      { key: 'customers', title: 'Customers', req: ['id', 'name', 'segment'], desc: 'Export, OEM, dealer and project customers (fictional), with the dedicated mould sets some of them have.' }
+    ] },
+    { grp: 'Traceability & access', items: [
+      { key: 'printMark', title: 'Print-mark format', req: ['id', 'value'], desc: 'What is stamped on the back of every sheet at book building — press, mould set, date, cycle of the day and daylight.' },
+      { key: 'roles', title: 'Roles & rights', req: ['id', 'role'], desc: 'Who may plan, confirm, upload masters and see what.' },
+      { key: 'users', title: 'Users', req: ['id', 'name', 'roleId'], refs: { roleId: 'roles' }, desc: 'Users with their role (fictional).' }
+    ] }
+  ];
+  var ALL = []; CAT.forEach(function (g) { g.items.forEach(function (x) { x.grp = g.grp; x.kf = x.kf || 'id'; x.engine = !!ENGINE[x.key]; ALL.push(x); }); });
+  var BY = {}; ALL.forEach(function (x) { BY[x.key] = x; });
+  var ov = X.State.get('masters', {}), audit = X.State.get('masterAudit', []);
+  function rowsOf(mst) {
+    var base = (D.m[mst.key] || []).map(function (r) { return Object.assign({}, r); }), o = ov[mst.key];
+    if (!o || !o.rows) return base;
+    var idx = {}; base.forEach(function (r, i) { idx[r[mst.kf]] = i; });
+    o.rows.forEach(function (r) { if (r[mst.kf] in idx) base[idx[r[mst.kf]]] = Object.assign({}, base[idx[r[mst.kf]]], r, { _ov: 'UPDATED' }); else base.push(Object.assign({}, r, { _ov: 'NEW' })); });
+    return base;
+  }
+  var cur = BY.presses, h = X.hashParam(); if (h && BY[h]) cur = BY[h];
+
+  function kpis() {
+    var recs = ALL.reduce(function (a, x) { return a + rowsOf(x).length; }, 0);
+    var conf = 0, gen = 0;
+    ALL.forEach(function (x) { rowsOf(x).forEach(function (r) { if (typeof r.source === 'string') { if (r.source.indexOf('CONFIRMED') >= 0) conf++; else gen++; } }); });
+    var up = audit.reduce(function (a, x) { return a + x.rows; }, 0);
+    $('kpis').innerHTML = [
+      ['Masters', ALL.length, CAT.length + ' groups', 'blue'],
+      ['Records', X.n(recs), 'across every master', 'blue'],
+      ['Drive the plan', ALL.filter(function (x) { return x.engine; }).length, 'masters the engine reads — an upload re-plans the shop', 'brand'],
+      ['Reference checks', ALL.filter(function (x) { return x.refs; }).length, 'masters with foreign keys, validated on upload', 'green'],
+      ['Confirmed by Merino', conf, 'rows from the proposal or confirmed with the user · ' + gen + ' generated for the demo', 'grey'],
+      ['Uploaded this session', X.n(up), audit.length + ' upload' + (audit.length === 1 ? '' : 's'), up ? 'amber' : 'grey']
+    ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');
+  }
+  function nav() {
+    $('mcount').textContent = ALL.length;
+    $('mnav').innerHTML = CAT.map(function (g) {
+      return '<div class="g">' + esc(g.grp) + '</div>' + g.items.map(function (x) {
+        return '<a class="' + (x.key === cur.key ? 'active' : '') + '" data-m="' + x.key + '" title="' + esc(x.desc) + '"><i class="fa-solid fa-table-list" style="font-size:10px;opacity:.6"></i>' + esc(x.title) + (x.engine ? ' <i class="fa-solid fa-circle eng" title="the planning engine reads this master"></i>' : '') + '<span class="n">' + rowsOf(x).length + '</span></a>';
+      }).join('');
+    }).join('');
+  }
+  function label(k) { return k.replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); }).replace(/ Id$/, ' id'); }
+  function cell(v) {
+    if (v === true) return '<i class="fa-solid fa-check ok"></i>'; if (v === false) return '<i class="fa-solid fa-minus no"></i>';
+    if (v == null || v === '') return '<span class="hint">—</span>';
+    if (Array.isArray(v)) return esc(v.join(', ')); if (typeof v === 'object') return '<span class="mono small">' + esc(JSON.stringify(v)) + '</span>';
+    if (typeof v === 'string' && /^(CONFIRMED|GENERATED)/.test(v)) return '<span class="src ' + (v.indexOf('CONFIRMED') === 0 ? 'c' : '') + '">' + esc(v) + '</span>';
+    return esc(v);
+  }
+  function render() {
+    kpis(); nav();
+    var rows = rowsOf(cur), q = ($('q').value || '').toLowerCase();
+    if (q) rows = rows.filter(function (r) { return JSON.stringify(r).toLowerCase().indexOf(q) >= 0; });
+    $('mtitle').textContent = cur.title; $('mdesc').textContent = cur.desc;
+    $('mmeta').innerHTML = X.n(rows.length) + ' rows · key <span class="mono">' + esc(cur.kf) + '</span>' + (cur.refs ? ' · references ' + Object.keys(cur.refs).map(function (k) { return k + ' → ' + cur.refs[k]; }).join(', ') : '') +
+      (cur.engine ? ' · <span class="badge b-brand">drives the plan</span>' : ' · <span class="badge b-grey">reference</span>') + (ov[cur.key] ? ' · <span class="badge b-upd">' + ov[cur.key].rows.length + ' rows from Excel</span>' : '');
+    $('sample').style.display = cur.key === 'skus' ? '' : 'none';
+    var cols = []; rows.forEach(function (r) { Object.keys(r).forEach(function (k) { if (cols.indexOf(k) < 0 && k !== '_ov') cols.push(k); }); });
+    var html = '', CAP = 300;
+    if (cur.matrix && !q) {
+      var rk = cur.matrix[0], ck = cur.matrix[1], vk = cur.matrix[2], rs = [], cs = [];
+      rows.forEach(function (r) { if (rs.indexOf(r[rk]) < 0) rs.push(r[rk]); if (cs.indexOf(r[ck]) < 0) cs.push(r[ck]); });
+      html += '<div class="sub-title">Matrix view</div><div class="tbl-wrap" style="max-height:280px;margin-bottom:12px"><table class="tbl mx"><thead><tr><th>' + esc(label(rk)) + '</th>' + cs.map(function (c) { return '<th style="text-align:center">' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        rs.map(function (r) { return '<tr><td class="strong">' + esc(r) + '</td>' + cs.map(function (c) { var x = rows.filter(function (z) { return z[rk] === r && z[ck] === c; })[0]; if (!x) return '<td class="nn">·</td>'; var v = x[vk]; return v === true ? '<td class="y">✓</td>' : v === false || v === 0 ? '<td class="nn">✗</td>' : '<td class="mono" style="text-align:center">' + esc(v) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div><div class="sub-title">Rows</div>';
+    }
+    html += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' + cols.map(function (c) { return '<th>' + esc(label(c)) + '</th>'; }).join('') + '<th></th></tr></thead><tbody>' +
+      rows.slice(0, CAP).map(function (r) { return '<tr>' + cols.map(function (c) { return '<td class="' + (typeof r[c] === 'boolean' ? 'bool' : '') + (c === cur.kf ? ' mono strong' : '') + '">' + cell(r[c]) + '</td>'; }).join('') + '<td>' + (r._ov ? '<span class="badge ' + (r._ov === 'NEW' ? 'b-new' : 'b-upd') + '">' + r._ov + '</span>' : '') + '</td></tr>'; }).join('') +
+      (rows.length > CAP ? '<tr><td colspan="' + (cols.length + 1) + '" class="hint">… ' + X.n(rows.length - CAP) + ' more rows — use the search, or download the template for all of them</td></tr>' : '') + '</tbody></table></div>';
+    $('view').innerHTML = html;
+    renderAudit(); newSku();
+  }
+  $('q').addEventListener('input', render);
+  $('mnav').addEventListener('click', function (e) { var a = e.target.closest('[data-m]'); if (!a) return; cur = BY[a.getAttribute('data-m')]; $('q').value = ''; hidePrev(); render(); });
+
+  // ---------------------------------------------------------------- Excel template
+  $('dl').addEventListener('click', function () {
+    var rows = rowsOf(cur).map(function (r) { var o = {}; Object.keys(r).forEach(function (k) { if (k !== '_ov') o[k] = Array.isArray(r[k]) ? r[k].join(', ') : (r[k] && typeof r[k] === 'object') ? JSON.stringify(r[k]) : r[k]; }); return o; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), cur.key.slice(0, 31));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Master', cur.title], ['Sheet / key column', cur.key + ' / ' + cur.kf], ['Required columns', cur.req.join(', ')],
+      ['References', cur.refs ? Object.keys(cur.refs).map(function (k) { return k + ' -> ' + cur.refs[k]; }).join(', ') : '—'], ['Drives the plan', cur.engine ? 'yes — applied rows re-plan the press shop' : 'no — reference master'],
+      ['Generated', new Date().toISOString()], ['Note', 'Edit rows or add new ones, keep the header row, then Upload from Excel.']]), 'README');
+    XLSX.writeFile(wb, 'MER_' + cur.key + '_template.xlsx');
+    X.toast('Template with ' + X.n(rows.length) + ' current rows downloaded — edit it in Excel and upload it back');
+  });
+
+  // ---------------------------------------------------------------- upload, validation, preview
+  var pending = null;
+  $('ul').addEventListener('click', function () { $('file').click(); });
+  $('file').addEventListener('change', function () { if (this.files[0]) handle(this.files[0]); this.value = ''; });
+  var dz = $('drop');
+  dz.addEventListener('dragover', function (e) { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', function () { dz.classList.remove('over'); });
+  dz.addEventListener('drop', function (e) { e.preventDefault(); dz.classList.remove('over'); if (e.dataTransfer.files[0]) handle(e.dataTransfer.files[0]); });
+  function handle(file) {
+    var fr = new FileReader();
+    fr.onload = function () {
+      try { var wb = XLSX.read(fr.result, { type: 'array' }); var name = wb.SheetNames.indexOf(cur.key.slice(0, 31)) >= 0 ? cur.key.slice(0, 31) : wb.SheetNames[0]; preview(file.name, XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' })); }
+      catch (err) { X.toast('Could not read ' + file.name + ': ' + err.message, 'fa-triangle-exclamation'); }
+    };
+    fr.readAsArrayBuffer(file);
+  }
+  $('sample').addEventListener('click', function () {
+    var s = D.scenarios.S7.sku;
+    preview('S7_new_sku.xlsx (sample row)', [{ id: s.id, decorId: s.decorId, finishId: s.finishId, mm: s.mm, sizeId: s.sizeId, gradeId: s.gradeId, sides: s.sides }]);
+  });
+  var NUM = { bedFt: 1, daylights: 1, lenMm: 1, widMm: 1, durationMin: 1, pressMin: 1, platesPerDaylight: 1, plates: 1, lifeLimit: 1, counterAtBase: 1, mm: 1, shade: 1, value: 1, days: 1, rsPerLineDay: 1, normSheets: 1, usePerDay: 1, onHandAtBase: 1, leadDays: 1, stockAtBase: 1, reorderSheets: 1, gsm: 1, minutes: 1, kraftPlies: 1, profit: 1, dates: 1, norms: 1, changeover: 1, mix: 1 };
+  function norm(v) {
+    if (typeof v === 'string') { var t = v.trim(); if (/^(true|yes|y)$/i.test(t)) return true; if (/^(false|no|n)$/i.test(t)) return false; if (t !== '' && /^-?\d+(\.\d+)?$/.test(t)) return +t; return t; }
+    return v;
+  }
+  function preview(name, rows) {
+    var base = rowsOf(cur), keys = {}; base.forEach(function (r) { keys[r[cur.kf]] = r; });
+    var seen = {}, out = [];
+    rows.forEach(function (raw, i) {
+      var r = {}; Object.keys(raw).forEach(function (k) { var v = norm(raw[k]); if (v !== '') r[k.trim()] = v; });
+      var errs = [];
+      cur.req.forEach(function (c) { if (r[c] == null || r[c] === '') errs.push('missing ' + c); });
+      var k = r[cur.kf];
+      if (k != null && k !== '') { if (seen[k]) errs.push('duplicate key in the file'); seen[k] = 1; }
+      if (cur.refs) Object.keys(cur.refs).forEach(function (f) {
+        if (r[f] == null || r[f] === '') return;
+        var tgt = BY[cur.refs[f]]; if (!tgt) return;
+        if (!rowsOf(tgt).some(function (x) { return String(x[tgt.kf]) === String(r[f]); })) errs.push(f + ' "' + r[f] + '" is not in ' + tgt.title);
+      });
+      Object.keys(r).forEach(function (f) { if (NUM[f] && typeof r[f] !== 'number') errs.push(f + ' must be a number'); });
+      var status = errs.length ? 'ERROR' : (k in keys ? 'UPDATE' : 'NEW'), changes = [];
+      if (status === 'UPDATE') {
+        Object.keys(r).forEach(function (f) { if (f !== cur.kf && String(keys[k][f]) !== String(r[f])) changes.push(f + ': ' + String(keys[k][f] == null ? '—' : keys[k][f]) + ' → ' + r[f]); });
+        if (!changes.length) status = 'UNCHANGED';
+      }
+      out.push({ row: i + 2, data: r, status: status, errs: errs, changes: changes });
+    });
+    pending = { name: name, rows: out };
+    var n = { NEW: 0, UPDATE: 0, ERROR: 0, UNCHANGED: 0 }; out.forEach(function (x) { n[x.status]++; });
+    $('pfile').textContent = name;
+    $('pmeta').innerHTML = out.length + ' rows · <span class="badge b-green">' + n.NEW + ' new</span> <span class="badge b-amber">' + n.UPDATE + ' updates</span> <span class="badge b-red">' + n.ERROR + ' errors</span> <span class="badge b-grey">' + n.UNCHANGED + ' unchanged</span>';
+    var cols = []; out.forEach(function (x) { Object.keys(x.data).forEach(function (k) { if (cols.indexOf(k) < 0) cols.push(k); }); });
+    $('prev').innerHTML = '<thead><tr><th>Row</th><th>Status</th>' + cols.map(function (c) { return '<th>' + esc(label(c)) + '</th>'; }).join('') + '<th>Check</th></tr></thead><tbody>' +
+      out.map(function (x) { return '<tr class="' + x.status + '"><td class="mono">' + x.row + '</td><td>' + (x.status === 'ERROR' ? '<span class="badge b-red">error</span>' : x.status === 'NEW' ? '<span class="badge b-green">new</span>' : x.status === 'UPDATE' ? '<span class="badge b-amber">update</span>' : '<span class="badge b-grey">unchanged</span>') + '</td>' +
+        cols.map(function (c) { return '<td>' + cell(x.data[c]) + '</td>'; }).join('') + '<td class="small" style="white-space:normal">' + (x.errs.length ? '<span class="deviation">' + x.errs.map(esc).join('; ') + '</span>' : x.changes.length ? esc(x.changes.join('; ')) : '') + '</td></tr>'; }).join('') + '</tbody>';
+    $('pnote').textContent = n.ERROR ? n.ERROR + ' row(s) with errors are skipped — fix them in Excel and upload again.' : 'Every row passed the checks.';
+    $('apply').disabled = !(n.NEW + n.UPDATE);
+    $('prevcard').style.display = ''; $('prevcard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function hidePrev() { pending = null; $('prevcard').style.display = 'none'; }
+  $('cancel').addEventListener('click', hidePrev);
+  $('apply').addEventListener('click', function () {
+    if (!pending) return;
+    var good = pending.rows.filter(function (x) { return x.status === 'NEW' || x.status === 'UPDATE'; }); if (!good.length) return;
+    var mst = cur, file = pending.name;
+    X.replan(function () {
+      var o = ov[mst.key] || { kf: mst.kf, rows: [] };
+      good.forEach(function (x) { var i = -1; o.rows.forEach(function (r, j) { if (String(r[mst.kf]) === String(x.data[mst.kf])) i = j; }); if (i >= 0) o.rows[i] = Object.assign({}, o.rows[i], x.data); else o.rows.push(x.data); });
+      o.appliedAt = new Date().toISOString(); ov[mst.key] = o; X.State.set('masters', ov);
+      audit.unshift({ at: new Date().toISOString(), by: 'ppsadmin (PPS Administrator)', master: mst.title, file: file, rows: good.length,
+        news: good.filter(function (x) { return x.status === 'NEW'; }).length, updates: good.filter(function (x) { return x.status === 'UPDATE'; }).length, skipped: pending.rows.length - good.length,
+        what: good.slice(0, 4).map(function (x) { return x.data[mst.kf] + (x.changes.length ? ' (' + x.changes.join('; ') + ')' : ' (new)'); }).join(' · ') });
+      X.State.set('masterAudit', audit);
+    }, mst.engine ? 'Re-planning the press shop with the new ' + mst.title.toLowerCase() : 'Applying the rows', function () {
+      X.toast(good.length + ' row(s) applied to ' + mst.title + (mst.engine ? ' — the plan on every page has been re-run' : ''));
+      hidePrev(); render();
+    });
+  });
+  function renderAudit() {
+    $('audit').innerHTML = audit.length ? '<div class="tbl-wrap" style="max-height:220px"><table class="tbl"><thead><tr><th>When</th><th>User</th><th>Master</th><th>File</th><th class="num">Applied</th><th class="num">New / updated / skipped</th><th>What changed</th></tr></thead><tbody>' +
+      audit.map(function (a) { return '<tr><td class="mono">' + esc(String(a.at).replace('T', ' ').slice(0, 16)) + '</td><td>' + esc(a.by) + '</td><td>' + esc(a.master) + '</td><td class="mono small">' + esc(a.file) + '</td><td class="num mono">' + a.rows + '</td><td class="num mono">' + a.news + ' / ' + a.updates + ' / ' + a.skipped + '</td><td class="small" style="white-space:normal">' + esc(a.what || '') + '</td></tr>'; }).join('') + '</tbody></table></div>' :
+      '<div class="hint">No master-data change in this session. Download a template, edit it in Excel and upload it — or, on the SKU master, load the scenario S7 row — to see the checks, the preview, the audit row and the re-plan.</div>';
+  }
+  // after a new SKU is applied: what it inherited from its attributes (req 1d / 5b)
+  function newSku() {
+    var o = ov.skus, card = $('skucard');
+    if (!o || !o.rows || !o.rows.length) { card.style.display = 'none'; return; }
+    X.withPlan(function (r) {
+      var m = r.m, html = o.rows.slice(-3).map(function (row) {
+        var s = m.skus[row.id]; if (!s) return '<div class="small deviation">' + esc(row.id) + ' could not be built — check its attributes.</div>';
+        var sets = [8, 14, 16].map(function (b) { var ss = (m.setsByKey[s.finishId + '|' + b] || []); return ss.length ? b + ' ft: ' + ss.map(function (x) { return x.id; }).join(', ') : null; }).filter(Boolean).join(' · ');
+        var ln = r.lines.filter(function (x) { return x.skuId === s.id; });
+        return '<div class="kv" style="margin-bottom:10px"><div class="k">New SKU</div><div class="v"><b class="mono">' + esc(s.id) + '</b> — ' + esc(X.skuText(m, s.id)) + '</div>' +
+          '<div class="k">Eligible presses</div><div class="v">' + (s.presses.length ? s.presses.map(function (p) { return '<span class="chip">' + p + '</span>'; }).join(' ') : '<span class="deviation">none — no press can make this combination</span>') + '</div>' +
+          '<div class="k">Cure band</div><div class="v">' + esc((m.bandById[s.band] || {}).name || '—') + ' (' + esc(s.band) + ', ' + ((m.bandById[s.band] || {}).pressMin || '?') + ' min, ' + ((m.bandById[s.band] || {}).ppd || '?') + ' plates a daylight)</div>' +
+          '<div class="k">Mould sets of its texture</div><div class="v small">' + esc(sets || 'none') + '</div>' +
+          '<div class="k">Mould health class</div><div class="v">' + esc(s.hc) + ' — needs ≥ ' + X.pct(m.health[s.hc], 0) + ' of plate life</div>' +
+          '<div class="k">In the plan</div><div class="v">' + (ln.length ? ln.length + ' order line' + (ln.length > 1 ? 's' : '') : '<span class="hint">no order line yet</span>') + ' · <a href="atp.html#' + esc(s.id) + '">quote a date in ATP &amp; Capacity</a></div></div>';
+      }).join('');
+      $('skunew').innerHTML = html + '<div class="note"><i class="fa-solid fa-circle-info"></i><span>Nothing was mapped by hand: the presses, the cure band, the mould sets and the health class all follow from the attributes on the uploaded row — which is why a new design or size is runnable the moment it is in the master.</span></div>';
+      card.style.display = '';
+    });
+  }
+  window.addEventListener('hashchange', function () { var k = X.hashParam(); if (BY[k]) { cur = BY[k]; hidePrev(); render(); } });
+  window.addEventListener('mer:navigate', function (e) { var k = String(e.detail || ''); if (BY[k]) { cur = BY[k]; hidePrev(); render(); } });
+  render();
+</script>
+</body>
+</html>

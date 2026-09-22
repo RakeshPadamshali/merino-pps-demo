@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stock Norms · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  #nt-wrap { max-height:520px; }
+  .bandbar { display:flex; height:24px; border-radius:4px; overflow:hidden; gap:2px; margin:4px 0 2px; }
+  .bandbar div { display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; min-width:20px; }
+  .nb-lab { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--color-text-muted); margin-top:6px; }
+  .nb-lab i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+  .bchip { display:inline-block; font-size:10px; font-weight:700; padding:1px 7px; border-radius:4px; min-width:52px; text-align:center; }
+  .row-l { font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:.3px; font-weight:600; margin-top:8px; }
+  .swatch { display:inline-block; width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,.15); vertical-align:-3px; margin-right:6px; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Stock Norms — make-to-stock SKUs in buffer bands, now and after the plan</h1><div class="crumb">Materials › Stock Norms › <span id="ctx"></span></div></div>
+    <div class="actions"><a class="btn btn-outline btn-sm" href="masters.html#stockNorms"><i class="fa-solid fa-database"></i> Stock-norm master</a><button class="btn btn-outline btn-sm" id="xl"><i class="fa-solid fa-file-excel"></i> Excel</button></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid-1-2">
+    <div class="card"><div class="card-head"><i class="fa-solid fa-chart-simple"></i> Buffer bands — <span id="bands-h">180 SKUs</span></div><div class="card-body" id="bands"></div></div>
+    <div class="card"><div class="card-head"><i class="fa-solid fa-chart-line"></i> <span id="dtitle">On hand</span><span class="right hint" id="dmeta"></span></div><div class="card-body"><div id="proj" style="height:250px"></div><div class="small" id="dnote"></div></div></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><i class="fa-solid fa-table-list"></i> Make-to-stock SKUs <span class="right hint" id="ncount"></span></div>
+    <div class="card-body">
+      <div class="filters">
+        <span class="fl">Band now</span><select id="f-now"><option value="">Any</option><option>BLACK</option><option>RED</option><option>YELLOW</option><option>GREEN</option><option>BLUE</option></select>
+        <span class="fl">Band at the end</span><select id="f-end"><option value="">Any</option><option>BLACK</option><option>RED</option><option>YELLOW</option><option>GREEN</option><option>BLUE</option></select>
+        <span class="fl">Search</span><input id="f-q" placeholder="SKU / decor / texture" size="22">
+      </div>
+      <div class="tbl-wrap" id="nt-wrap"><table class="tbl" id="nt"></table></div>
+      <div class="note"><i class="fa-solid fa-circle-info"></i><span><b>How a norm works.</b> Each make-to-stock SKU has a norm (the buffer target in sheets). Dealers draw from stock every day; a dealer order for the SKU is served from free stock first. When stock falls below two thirds of the norm (yellow) the planner raises a replenishment to bring it back to the norm; the weighted plan scores it by how deep into the buffer the SKU is (black and red first) and fills it after export and committed orders — Merino today fills it strictly last.</span></div>
+    </div>
+  </div>
+</main></div>
+<script>window.MER_PAGE='norms'; window.MER_TITLE='Stock Norms'; window.MER_ICON='fa-boxes-stacked';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script><script src="assets/vendor/echarts.min.js"></script><script src="assets/vendor/xlsx.full.min.js"></script>
+<script>
+  var X = window.MERX, R = null, T0 = null, m = null, V = null, sel = null, chart = null, $ = function (id) { return document.getElementById(id); };
+  var BAND = [['BLACK', '#1f2733', 'zero stock or short'], ['RED', '#d03b3b', 'below 1/3 of norm'], ['YELLOW', '#fab219', '1/3 – 2/3'], ['GREEN', '#0ca30c', '2/3 – norm'], ['BLUE', '#2a78d6', 'above norm']];
+  var BC = {}; BAND.forEach(function (b) { BC[b[0]] = b[1]; });
+  function bandOf(pos) { return pos <= 0 ? 'BLACK' : pos < 1 / 3 ? 'RED' : pos < 2 / 3 ? 'YELLOW' : pos <= 1 ? 'GREEN' : 'BLUE'; }
+  function chip(b) { return '<span class="bchip" style="background:' + BC[b] + ';color:' + X.textOn(BC[b]) + '">' + b.charAt(0) + b.slice(1).toLowerCase() + '</span>'; }
+  // below zero = dealer demand waiting (backorder): shown as 0 on hand + the backorder, never as negative stock
+  function qty(v) { return v >= 0 ? X.n(v) : '0 <span class="deviation small">· ' + X.n(-v) + ' on backorder</span>'; }
+  function sw(dec) { var x = X.decor(dec); return '<span class="swatch" style="background:' + x.hex + '"></span>'; }
+
+  function derive(r) {
+    if (r._nrm) return r._nrm;
+    var hs = r.hist.state, fs = r.state, rows = [], T = r.m.asOf;
+    var made = {}, first = {};
+    r.cycles.forEach(function (c, i) { if (i < r.nHist) return; c.rows.forEach(function (rw) { rw.pl.forEach(function (q) { if (String(q[0]).indexOf('NORM/') === 0) { var k = String(q[0]).slice(5); made[k] = (made[k] || 0) + q[1]; if (first[k] == null) first[k] = c.s0; } }); }); });
+    var served = {}; r.lines.forEach(function (x) { if (!x.norm && x.alloc > 0 && x.rel >= T) served[x.skuId] = (served[x.skuId] || 0) + x.alloc; });
+    r.m.norms.forEach(function (n) {
+      var a = hs.norm[n.skuId], b = fs.norm[n.skuId]; if (!a || !b) return;
+      var p0 = a.onHand / n.norm, p1 = b.onHand / n.norm;
+      rows.push({ n: n, s: r.m.skus[n.skuId], now: a.onHand, end: b.onHand, p0: p0, p1: p1, b0: bandOf(p0), b1: bandOf(p1), made: made[n.skuId] || 0, first: first[n.skuId], served: served[n.skuId] || 0, cover: a.onHand > 0 ? a.onHand / n.use : 0 });
+    });
+    var c0 = {}, c1 = {}; BAND.forEach(function (b) { c0[b[0]] = 0; c1[b[0]] = 0; }); rows.forEach(function (x) { c0[x.b0]++; c1[x.b1]++; });
+    r._nrm = { rows: rows, c0: c0, c1: c1, made: rows.reduce(function (a, x) { return a + x.made; }, 0), served: rows.reduce(function (a, x) { return a + x.served; }, 0) };
+    return r._nrm;
+  }
+  function bar(cnt) { return '<div class="bandbar">' + BAND.map(function (b) { var v = cnt[b[0]] || 0; return v ? '<div style="flex:' + v + ';background:' + b[1] + ';color:' + X.textOn(b[1]) + '" title="' + b[0] + ' · ' + b[2] + ': ' + v + ' SKUs">' + v + '</div>' : ''; }).join('') + '</div>'; }
+
+  function render(r) {
+    R = r; m = r.m; V = derive(r);
+    var st = X.settings();
+    X.withPlan(function (t) { T0 = t; draw(); }, { preset: 'today', weights: null, whatifs: st.whatifs }, 'Planning Merino today for the comparison');
+  }
+  function draw() {
+    var st = X.settings(), live = st.preset === 'custom' ? 'Custom weights' : ((X.D.m.weights.filter(function (w) { return w.id === st.preset; })[0] || {}).label || st.preset), VT = derive(T0), k = R.kpi;
+    $('ctx').textContent = m.norms.length + ' make-to-stock SKUs · live plan: ' + live + ' · as of ' + X.fmt(X.ASOF);
+    $('bands-h').textContent = m.norms.length + ' SKUs';
+    $('kpis').innerHTML = [
+      ['Make-to-stock SKUs', X.n(m.norms.length), X.n(m.norms.reduce(function (a, n) { return a + n.norm; }, 0)) + ' sheets of norm in total', 'blue'],
+      ['Black or red now', X.n(V.c0.BLACK + V.c0.RED), V.c0.BLACK + ' at zero stock at the as-of', V.c0.BLACK ? 'red' : 'amber'],
+      ['Black or red at the end', X.n(V.c1.BLACK + V.c1.RED), V.c1.BLACK + ' at zero · Merino today ' + (VT.c1.BLACK + VT.c1.RED), V.c1.BLACK + V.c1.RED <= VT.c1.BLACK + VT.c1.RED ? 'green' : 'amber'],
+      ['Replenishment planned', X.n(V.made), 'sheets in ' + X.D.meta.forwardDays + ' days · ' + X.pct(k.sheets ? V.made / k.sheets : 0, 0) + ' of the plan', 'blue'],
+      ['Served from stock', X.n(V.served), 'sheets of dealer orders taken from free stock', 'grey'],
+      ['Green or above at the end', X.n(V.c1.GREEN + V.c1.BLUE), 'Merino today ' + (VT.c1.GREEN + VT.c1.BLUE), V.c1.GREEN + V.c1.BLUE >= VT.c1.GREEN + VT.c1.BLUE ? 'green' : 'amber']
+    ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');
+    $('bands').innerHTML = '<div class="row-l">Now · ' + X.fmtD(X.ASOF) + '</div>' + bar(V.c0) +
+      '<div class="row-l">End of the horizon · live plan (' + X.esc(live) + ')</div>' + bar(V.c1) +
+      (st.preset === 'today' ? '' : '<div class="row-l">End of the horizon · Merino today</div>' + bar(VT.c1)) +
+      '<div class="nb-lab">' + BAND.map(function (b) { return '<span><i style="background:' + b[1] + '"></i>' + b[0].charAt(0) + b[0].slice(1).toLowerCase() + ' · ' + b[2] + '</span>'; }).join('') + '</div>' +
+      '<div class="note"><i class="fa-solid fa-circle-info"></i><span>Norm replenishment is the third objective. The Objective Studio shows what a heavier norm weight buys and what it costs in delivery.</span></div>';
+    if (!sel || !m.normBySku[sel]) { var h = X.hashParam(); sel = m.normBySku[h] ? h : V.rows.slice().sort(function (a, b) { return a.p0 - b.p0 || (a.n.skuId < b.n.skuId ? -1 : 1); })[0].n.skuId; }
+    detail(); table();
+  }
+
+  function detail() {
+    var x = V.rows.filter(function (q) { return q.n.skuId === sel; })[0]; if (!x) return;
+    var n = x.n, s = x.s;
+    $('dtitle').innerHTML = sw(s.decorId) + X.esc(X.skuText(m, n.skuId)) + ' <span class="hint mono">' + X.esc(n.skuId) + '</span>';
+    $('dmeta').textContent = 'norm ' + X.n(n.norm) + ' · uses ' + n.use + ' a day';
+    // on hand over time: dealer draw every hour, orders served from stock at their release, replenishment lands after finishing
+    var ev = [], id = 'NORM/' + n.skuId;
+    R.cycles.forEach(function (c) { c.rows.forEach(function (rw) { rw.pl.forEach(function (q) { if (q[0] === id) ev.push([c.end + m.finishDays * 1440, q[1]]); }); }); });
+    R.lines.forEach(function (l) { if (!l.norm && l.skuId === n.skuId && l.alloc > 0) ev.push([l.rel, -l.alloc]); });
+    ev.sort(function (a, b) { return a[0] - b[0]; });
+    var data = [], lvl = n.onHand0, t = 0, j = 0;
+    for (var tt = 0; tt <= X.END; tt += 120) {
+      while (j < ev.length && ev[j][0] <= tt) { lvl += ev[j][1]; j++; }
+      data.push([X.dateOf(tt).getTime(), Math.round(lvl - n.use * tt / 1440)]);
+    }
+    var mx = Math.max(n.norm * 1.25, Math.max.apply(null, data.map(function (d) { return d[1]; })) * 1.05), mn = Math.min(0, Math.min.apply(null, data.map(function (d) { return d[1]; })));
+    function zone(lo, hi, col) { return [{ yAxis: lo, itemStyle: { color: col } }, { yAxis: hi }]; }
+    if (!chart) chart = echarts.init($('proj'));
+    chart.setOption({
+      animation: false, grid: { left: 50, right: 14, top: 14, bottom: 28 },
+      tooltip: { trigger: 'axis', formatter: function (ps) { var q = ps[0]; return X.fmt(Math.round((q.value[0] - X.dateOf(0).getTime()) / 60000)) + '<br>' + (q.value[1] >= 0 ? X.n(q.value[1]) + ' sheets on hand · ' + X.pct(q.value[1] / n.norm, 0) + ' of norm (' + bandOf(q.value[1] / n.norm).toLowerCase() + ')' : '0 on hand · ' + X.n(-q.value[1]) + ' on backorder (black)'); } },
+      xAxis: { type: 'time', min: X.dateOf(0).getTime(), max: X.dateOf(X.END).getTime(), axisLabel: { fontSize: 10, color: '#8a93a0', formatter: function (v) { var dd = new Date(v); return dd.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dd.getMonth()]; } }, splitLine: { show: false } },
+      yAxis: { type: 'value', min: Math.floor(mn / 50) * 50, max: Math.ceil(mx / 50) * 50, axisLabel: { fontSize: 10, color: '#8a93a0' }, splitLine: { show: false } },
+      series: [{ type: 'line', showSymbol: false, data: data, lineStyle: { width: 2, color: '#1f2733' },
+        markArea: { silent: true, label: { fontSize: 10, color: '#4a5563', position: 'insideTopLeft' }, data: [[{ yAxis: Math.floor(mn / 50) * 50, name: mn < 0 ? 'backorder — dealer demand waiting' : '', itemStyle: { color: 'rgba(31,39,51,0.10)' } }, { yAxis: 0 }], zone(0, n.norm / 3, 'rgba(208,59,59,0.12)'), zone(n.norm / 3, n.norm * 2 / 3, 'rgba(250,178,25,0.14)'), zone(n.norm * 2 / 3, n.norm, 'rgba(12,163,12,0.10)'), zone(n.norm, Math.ceil(mx / 50) * 50, 'rgba(42,120,214,0.08)')] },
+        markLine: { symbol: 'none', silent: true, data: [{ xAxis: X.dateOf(X.ASOF).getTime(), lineStyle: { color: X.COLOR.ink, width: 1, type: 'solid' }, label: { formatter: 'as-of', fontSize: 10, color: X.COLOR.ink } }, { yAxis: n.norm, lineStyle: { color: '#2a78d6', type: 'dashed', width: 1 }, label: { formatter: 'norm ' + n.norm, fontSize: 10, color: '#1c5cab', position: 'insideEndTop' } }] } }]
+    }, true);
+    $('dnote').innerHTML = 'Now <b>' + qty(Math.round(x.now)) + '</b> (' + chip(x.b0) + ') → end <b>' + qty(Math.round(x.end)) + '</b> (' + chip(x.b1) + ') · replenishment planned: <b>' + X.n(x.made) + '</b> sheets' + (x.first != null ? ', first pressed ' + X.fmt(x.first) : '') + ' · dealer orders served from stock: ' + X.n(x.served) + ' sheets. Below zero is dealer demand waiting on backorder; it is served first when replenishment lands.';
+  }
+
+  function table() {
+    var fn = $('f-now').value, fe = $('f-end').value, q = $('f-q').value.trim().toLowerCase();
+    var rows = V.rows.filter(function (x) { if (fn && x.b0 !== fn) return false; if (fe && x.b1 !== fe) return false; if (q && (x.n.skuId + ' ' + X.skuText(m, x.n.skuId)).toLowerCase().indexOf(q) < 0) return false; return true; })
+      .sort(function (a, b) { return a.p0 - b.p0 || (a.n.skuId < b.n.skuId ? -1 : 1); });
+    $('ncount').textContent = rows.length + ' of ' + V.rows.length + ' SKUs · deepest in the buffer first';
+    $('nt').innerHTML = '<thead><tr><th>Product</th><th class="num">Norm · use a day</th><th>Now</th><th class="num">On hand now</th><th class="num">Cover</th><th class="num">Replenishment planned</th><th>First pressed</th><th>End of horizon</th><th class="num">On hand at the end</th></tr></thead><tbody>' +
+      rows.map(function (x) { return '<tr data-sku="' + X.esc(x.n.skuId) + '" style="cursor:pointer"' + (x.n.skuId === sel ? ' class="sel"' : '') + '><td>' + sw(x.s.decorId) + X.esc(X.skuText(m, x.n.skuId)) + '<div class="hint mono small">' + X.esc(x.n.skuId) + '</div></td><td class="num mono">' + X.n(x.n.norm) + ' <span class="hint">· ' + x.n.use + '</span></td><td>' + chip(x.b0) + ' <span class="hint mono">' + X.pct(Math.max(0, x.p0), 0) + '</span></td><td class="num mono">' + qty(Math.round(x.now)) + '</td><td class="num mono">' + (x.cover ? x.cover.toFixed(1) + ' d' : '<span class="deviation">0 d</span>') + '</td><td class="num mono">' + (x.made ? X.n(x.made) : '<span class="hint">—</span>') + '</td><td>' + (x.first != null ? X.fmt(x.first) : '<span class="hint">—</span>') + '</td><td>' + chip(x.b1) + ' <span class="hint mono">' + X.pct(Math.max(0, x.p1), 0) + '</span></td><td class="num mono">' + qty(Math.round(x.end)) + '</td></tr>'; }).join('') + '</tbody>';
+  }
+  ['f-now', 'f-end'].forEach(function (id) { $(id).addEventListener('change', table); });
+  $('f-q').addEventListener('input', table);
+  $('nt').addEventListener('click', function (e) { var tr = e.target.closest('[data-sku]'); if (!tr) return; sel = tr.getAttribute('data-sku'); detail(); table(); });
+  $('xl').addEventListener('click', function () {
+    X.xlsx([{ name: 'Stock norms', cols: ['SKU', 'Product', 'Norm', 'Use per day', 'On hand now', 'Band now', 'Position now %', 'Replenishment planned', 'First pressed', 'On hand at end', 'Band at end', 'Position at end %', 'Served from stock'],
+      rows: V.rows.map(function (x) { return [x.n.skuId, X.skuText(m, x.n.skuId), x.n.norm, x.n.use, Math.round(x.now), x.b0, Math.round(x.p0 * 100), x.made, x.first != null ? X.fmt(x.first) : '', Math.round(x.end), x.b1, Math.round(x.p1 * 100), x.served]; }),
+      widths: [22, 46, 8, 11, 12, 10, 13, 20, 18, 14, 11, 16, 16] }], 'Merino_Stock_Norms_' + X.yymmdd(X.ASOF) + '.xlsx');
+  });
+  window.addEventListener('resize', function () { if (chart) chart.resize(); });
+  window.addEventListener('mer:activated', function () { if (chart) chart.resize(); });
+  window.addEventListener('hashchange', function () { var h = X.hashParam(); if (m && m.normBySku[h]) { sel = h; detail(); table(); } });
+  X.withPlan(render);
+  X.whenPlanChanges(render);
+</script>
+</body>
+</html>

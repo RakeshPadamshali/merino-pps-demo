@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shift Work Orders · Merino PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css"><link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .shiftbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .shiftbar .lab { font-weight:600; font-size:13px; min-width:250px; text-align:center; }
+  .ptabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .ptabs button { border:1px solid var(--color-border); background:#fff; border-radius:16px; padding:4px 12px; font:12px 'Roboto'; cursor:pointer; color:var(--color-text-secondary); }
+  .ptabs button.on { background:var(--color-primary); border-color:var(--color-primary); color:#fff; font-weight:600; }
+  .cyc { border:1px solid var(--color-border); border-radius:8px; margin-bottom:10px; background:#fff; }
+  .cyc .ch { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:7px 12px; background:#fbfcfd; border-bottom:1px solid var(--color-border-light); border-radius:8px 8px 0 0; font-size:12px; cursor:pointer; }
+  .cyc .ch b { font-size:12.5px; } .cyc .ch .sp { margin-left:auto; display:flex; gap:6px; align-items:center; }
+  .cyc.closed .cb { display:none; } .cyc.closed .ch { border-bottom:none; border-radius:8px; }
+  .cyc table.tbl td { white-space:normal; }
+  .bandchip { display:inline-block; padding:1px 7px; border-radius:4px; font-size:10.5px; font-weight:700; }
+  .swatch { display:inline-block; width:12px; height:12px; border-radius:3px; border:1px solid rgba(0,0,0,.15); vertical-align:-2px; margin-right:5px; }
+  .pm { font-family:ui-monospace,Consolas,monospace; font-size:10.5px; color:#4a5563; }
+  .ldl { display:flex; flex-direction:column; gap:2px; }
+</style>
+<script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
+</head>
+<body>
+<div class="bm-layout"><main class="bm-content">
+  <div class="page-bar">
+    <div><h1>Shift Work Orders — what each press runs this shift, daylight by daylight</h1><div class="crumb">Scheduling › Shift Work Orders › <span id="ctx"></span></div></div>
+    <div class="actions"><button class="btn btn-outline btn-sm" id="xl"><i class="fa-solid fa-file-excel"></i> Excel work order</button></div>
+  </div>
+  <div class="card"><div class="card-body shiftbar">
+    <button class="btn btn-outline btn-sm" id="prev"><i class="fa-solid fa-chevron-left"></i></button><span class="lab" id="slab"></span><button class="btn btn-outline btn-sm" id="next"><i class="fa-solid fa-chevron-right"></i></button><button class="btn btn-outline btn-sm" id="now">Current shift</button>
+    <span class="hint" id="crew" style="margin-left:auto"></span>
+  </div></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="card"><div class="card-head"><i class="fa-solid fa-industry"></i> Presses this shift</div><div class="card-body"><div class="tbl-wrap"><table class="tbl" id="sum"></table></div></div></div>
+  <div class="grid-2-1">
+    <div class="card"><div class="card-head"><i class="fa-solid fa-clipboard-list"></i> Work order <span class="right hint" id="wmeta"></span></div><div class="card-body"><div class="ptabs" id="ptabs"></div><div id="wo"></div></div></div>
+    <div class="card"><div class="card-head"><i class="fa-solid fa-layer-group"></i> Book-building pick list <span class="right hint" id="pmeta"></span></div><div class="card-body" id="pick"></div></div>
+  </div>
+</main></div>
+<script>window.MER_PAGE='workorders'; window.MER_TITLE='Shift Work Orders'; window.MER_ICON='fa-clipboard-list';</script>
+<script src="assets/mer-chrome.js"></script>
+<script src="data/mer-data.js"></script><script src="assets/mer-engine.js"></script><script src="assets/mer-core.js"></script><script src="assets/vendor/xlsx.full.min.js"></script>
+<script>
+  var X = window.MERX, R = null, m = null, sh = null, press = null, $ = function (id) { return document.getElementById(id); };
+  var SH = { A: [360, 840], B: [840, 1320], C: [1320, 1800] }, ORDER = ['C', 'A', 'B'];
+  var PLY = {}; X.D.m.thicknesses.forEach(function (t) { PLY[t.mm] = t; });
+  var CREW = {}; X.D.m.shifts.forEach(function (s) { CREW[s.id] = s; });
+  // a shift = [day, id]; C of day d runs 22:00 d .. 06:00 d+1
+  function win(s) { var r = SH[s[1]]; return [s[0] * 1440 + r[0], s[0] * 1440 + r[1]]; }
+  function shiftAt(t) { var d = Math.floor(t / 1440), mm = t - d * 1440; return mm < 360 ? [d - 1, 'C'] : mm < 840 ? [d, 'A'] : mm < 1320 ? [d, 'B'] : [d, 'C']; }
+  function step(s, k) { var i = ['A', 'B', 'C'].indexOf(s[1]) + k, d = s[0]; while (i > 2) { i -= 3; d++; } while (i < 0) { i += 3; d--; } return [d, ['A', 'B', 'C'][i]]; }
+  function lineOf(id) { var ln = R.byId[id]; if (ln) return ln; if (String(id).indexOf('NORM/') === 0) return { id: id, skuId: String(id).slice(5), norm: true, cls: 'NORM', cust: null }; return { id: id, skuId: null }; }
+
+  function render(r) {
+    R = r; m = r.m;
+    if (!sh) sh = shiftAt(X.ASOF);
+    if (!press) press = m.presses[0].id;
+    draw();
+  }
+  function cyclesIn(s) {
+    var w = win(s), out = [];
+    R.cycles.forEach(function (c, i) { if (c.s0 >= w[0] && c.s0 < w[1]) out.push({ c: c, i: i, hist: i < R.nHist }); });
+    return out;
+  }
+  function draw() {
+    var w = win(sh), cs = cyclesIn(sh), crew = CREW[sh[1]] || {}, T = X.ASOF;
+    var state = w[1] <= T ? 'pressed' : w[0] > T ? 'planned' : 'running now';
+    $('slab').innerHTML = 'Shift ' + sh[1] + ' · ' + X.fmtD(w[0]) + ' ' + X.fmtT(w[0]) + ' – ' + X.fmtT(w[1]) + ' <span class="badge ' + (state === 'running now' ? 'b-blue' : state === 'pressed' ? 'b-grey' : 'b-green') + '">' + state + '</span>';
+    $('crew').innerHTML = '<i class="fa-solid fa-user-gear"></i> Shift in-charge <b>' + X.esc(crew.incharge || '') + '</b> · relief ' + X.esc(crew.relief || '');
+    $('ctx').textContent = 'Shift ' + sh[1] + ' of ' + X.fmtD(w[0]) + ' · ' + cs.length + ' cycles on ' + m.presses.length + ' presses';
+    $('prev').disabled = w[0] <= 0; $('next').disabled = w[1] >= X.END; $('now').disabled = String(shiftAt(T)) === String(sh);
+    var sheets = cs.reduce(function (a, q) { return a + q.c.sheets; }, 0), swaps = cs.reduce(function (a, q) { return a + q.c.swaps; }, 0), bc = cs.reduce(function (a, q) { return a + q.c.bandChg; }, 0);
+    var clean = cs.reduce(function (a, q) { return a + q.c.rows.filter(function (rw) { return rw.clean; }).length; }, 0), qc = cs.reduce(function (a, q) { return a + (q.c.qc || []).length; }, 0);
+    $('kpis').innerHTML = [
+      ['Press cycles', X.n(cs.length), 'starting in this shift', 'blue'],
+      ['Sheets', X.n(sheets), 'laminates to press', 'blue'],
+      ['Plate swaps', X.n(swaps), X.n(swaps * m.swapMin) + ' min of changeover', 'amber'],
+      ['Cure-band changes', X.n(bc), X.n(bc * m.bandMin) + ' min', 'amber'],
+      ['Cleaning passes', X.n(clean), 'daylights pressed empty', 'grey'],
+      [state === 'pressed' ? 'QC downgrades' : 'Status', state === 'pressed' ? X.n(qc) : state, state === 'pressed' ? 'daylights with B-grade sheets' : 'as of ' + X.fmt(T), state === 'pressed' ? (qc ? 'amber' : 'green') : 'blue']
+    ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');
+    // per press summary
+    $('sum').innerHTML = '<thead><tr><th>Press</th><th class="num">Cycles</th><th class="num">Sheets</th><th>Cure bands</th><th class="num">Swaps</th><th class="num">Cleaning</th><th class="num">Band changes</th><th>First cycle</th><th>Last cycle ends</th><th class="num">Pressing time</th></tr></thead><tbody>' +
+      m.presses.map(function (p) {
+        var pc = cs.filter(function (q) { return q.c.p === p.id; }), bands = {};
+        pc.forEach(function (q) { bands[q.c.band] = (bands[q.c.band] || 0) + 1; });
+        var busy = pc.reduce(function (a, q) { return a + (q.c.end - q.c.s0); }, 0);
+        return '<tr data-p="' + p.id + '" style="cursor:pointer"' + (p.id === press ? ' class="sel"' : '') + '><td class="strong">' + X.esc(p.name) + ' <span class="hint">' + p.bed + ' ft · ' + p.dl + ' DL</span></td><td class="num mono">' + pc.length + '</td><td class="num mono">' + X.n(pc.reduce(function (a, q) { return a + q.c.sheets; }, 0)) + '</td><td>' +
+          Object.keys(bands).sort().map(function (b) { return '<span class="bandchip" style="background:' + X.COLOR.band[b] + ';color:' + X.textOn(X.COLOR.band[b]) + '">' + b + ' ×' + bands[b] + '</span>'; }).join(' ') + '</td><td class="num mono">' + pc.reduce(function (a, q) { return a + q.c.swaps; }, 0) + '</td><td class="num mono">' + pc.reduce(function (a, q) { return a + q.c.rows.filter(function (rw) { return rw.clean; }).length; }, 0) + '</td><td class="num mono">' + pc.reduce(function (a, q) { return a + q.c.bandChg; }, 0) + '</td>' +
+          '<td>' + (pc.length ? '<a class="mono" href="loadbuilder.html#' + pc[0].c.id + '">' + pc[0].c.id + '</a> ' + X.fmtT(pc[0].c.s0) : '<span class="hint">—</span>') + '</td><td>' + (pc.length ? X.fmt(pc[pc.length - 1].c.end) : '<span class="hint">—</span>') + '</td><td class="num mono">' + X.dur(busy) + '</td></tr>';
+      }).join('') + '</tbody>';
+    $('ptabs').innerHTML = m.presses.map(function (p) { return '<button class="' + (p.id === press ? 'on' : '') + '" data-p="' + p.id + '">' + X.esc(p.name) + '</button>'; }).join('');
+    workOrder(cs); pickList(cs);
+  }
+
+  function workOrder(cs) {
+    var pc = cs.filter(function (q) { return q.c.p === press; }), p = m.pressById[press];
+    $('wmeta').textContent = p.name + ' · ' + pc.length + ' cycles';
+    if (!pc.length) { $('wo').innerHTML = '<div class="empty-state">No cycle starts on ' + X.esc(p.name) + ' in this shift' + (m.breakdowns.some(function (b) { return b.press === press; }) ? ' (see breakdowns in Plan vs Actual)' : '') + '.</div>'; return; }
+    $('wo').innerHTML = pc.map(function (q, k) {
+      var c = q.c, B = m.bandById[c.band];
+      var rows = c.rows.map(function (rw, r) {
+        if (!rw.s) return '<tr><td class="num mono">' + (r + 1) + '</td><td colspan="4" class="hint">idle — ' + X.esc(rw.why || '') + '</td></tr>';
+        var set = m.sets[rw.s], hl = c.setCounters && c.setCounters[rw.s] != null ? 1 - c.setCounters[rw.s] / set.limit : null;
+        var loads = rw.clean ? '<span class="badge b-amber">cleaning pass — no output</span>' : '<div class="ldl">' + rw.pl.reduce(function (acc, x) { var e = acc.filter(function (a) { return a[0] === x[0]; })[0]; if (e) e[1] += x[1]; else acc.push([x[0], x[1]]); return acc; }, []).map(function (x) {
+          var ln = lineOf(x[0]), s = ln.skuId && m.skus[ln.skuId];
+          return '<span>' + (s ? '<span class="swatch" style="background:' + X.decor(s.decorId).hex + '"></span>' : '') + '<b class="mono">' + X.n(x[1]) + '</b> × ' + X.esc(s ? X.skuText(m, ln.skuId) : ln.skuId) + ' <span class="hint">' + (ln.norm ? 'stock norm' : X.esc(ln.id) + ' · ' + X.esc(X.custName(ln.cust))) + '</span></span>';
+        }).join('') + '</div>';
+        return '<tr><td class="num mono">' + (r + 1) + '</td><td><span class="mono strong">' + X.esc(rw.s) + '</span>' + (rw.swap ? ' <span class="chip">swap</span>' : '') + '<div class="hint small">' + X.esc(X.finishName(rw.f)) + (hl != null ? ' · health ' + X.pct(hl, 0) : '') + '</div></td><td>' + loads + '</td><td class="num mono">' + rw.pl.length + '</td><td class="pm">' + X.esc(X.printMark(c, r)) + '</td></tr>';
+      }).join('');
+      return '<div class="cyc' + (k > 1 ? ' closed' : '') + '"><div class="ch"><b class="mono">' + c.id + '</b><span>' + X.fmtT(c.start) + (c.chg ? ' <span class="hint">+' + c.chg + ' min changeover</span>' : '') + ' → press ' + X.fmtT(c.s0) + '–' + X.fmtT(c.end) + '</span>' +
+        '<span class="bandchip" style="background:' + X.COLOR.band[c.band] + ';color:' + X.textOn(X.COLOR.band[c.band]) + '">' + c.band + ' ' + X.esc(B.name) + ' · ' + B.pressMin + ' min</span><span>' + X.n(c.sheets) + ' sheets · ' + c.platesUsed + '/' + c.plates + ' plates · ' + c.thick.map(function (t) { return t + ' mm'; }).join(', ') + '</span>' +
+        (q.hist ? '<span class="badge b-grey">pressed</span>' : '') + (c.qc && c.qc.length ? '<span class="badge b-amber">' + c.qc.length + ' QC downgrade' + (c.qc.length > 1 ? 's' : '') + '</span>' : '') +
+        '<span class="sp"><a class="btn btn-outline btn-sm" href="loadbuilder.html#' + c.id + '"><i class="fa-solid fa-table-cells"></i> Load map</a><i class="fa-solid fa-chevron-down hint"></i></span></div>' +
+        '<div class="cb"><table class="tbl"><thead><tr><th class="num">DL</th><th>Mould set</th><th>Load (sheets × product · order line)</th><th class="num">Plates</th><th>Print mark</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    }).join('');
+  }
+
+  // book building: decor paper per face, overlay per face (45 gsm for exterior / compact grades), kraft plies by thickness, release paper per laminate
+  function need(cs, pid) {
+    var dec = {}, ov = { 25: 0, 45: 0 }, kr = { 135: 0, 190: 0 }, rel = 0, total = 0;
+    cs.forEach(function (q) {
+      if (pid && q.c.p !== pid) return;
+      q.c.rows.forEach(function (rw) { rw.pl.forEach(function (x) {
+        var ln = lineOf(x[0]), s = ln.skuId && m.skus[ln.skuId]; if (!s) return;
+        var n = x[1], faces = s.faces, t = PLY[s.mm] || { kraftPlies: 4 };
+        dec[s.decorId] = (dec[s.decorId] || 0) + n * faces;
+        ov[s.gradeId === 'EX' || s.mm >= 2 ? 45 : 25] += n * faces;
+        kr[s.mm >= 2 ? 190 : 135] += n * t.kraftPlies; rel += n; total += n;
+      }); });
+    });
+    return { dec: dec, ov: ov, kr: kr, rel: rel, total: total };
+  }
+  function pickList(cs) {
+    var nd = need(cs, press), p = m.pressById[press], keys = Object.keys(nd.dec).sort(function (a, b) { return nd.dec[b] - nd.dec[a]; });
+    $('pmeta').textContent = p.name + ' · ' + X.n(nd.total) + ' laminates';
+    $('pick').innerHTML = keys.length ? '<table class="tbl"><thead><tr><th>Decor paper</th><th class="num">Sheets</th></tr></thead><tbody>' +
+      keys.map(function (d) { var x = X.decor(d), pp = X.by.papers[d] || {}; return '<tr><td><span class="swatch" style="background:' + x.hex + '"></span>' + X.esc(x.name) + ' <span class="hint mono">' + X.esc(pp.id || d) + '</span></td><td class="num mono">' + X.n(nd.dec[d]) + '</td></tr>'; }).join('') +
+      '<tr><td class="strong">Overlay 25 gsm</td><td class="num mono">' + X.n(nd.ov[25]) + '</td></tr><tr><td class="strong">Overlay 45 gsm <span class="hint">(exterior / compact)</span></td><td class="num mono">' + X.n(nd.ov[45]) + '</td></tr>' +
+      '<tr><td class="strong">Kraft 135 gsm plies <span class="hint">(HPL core)</span></td><td class="num mono">' + X.n(nd.kr[135]) + '</td></tr><tr><td class="strong">Kraft 190 gsm plies <span class="hint">(compact core)</span></td><td class="num mono">' + X.n(nd.kr[190]) + '</td></tr>' +
+      '<tr><td class="strong">Release paper</td><td class="num mono">' + X.n(nd.rel) + '</td></tr></tbody></table>' +
+      '<div class="note"><i class="fa-solid fa-circle-info"></i><span>Book building is manual: one decor paper and one overlay per laminate face, kraft core plies by thickness (from the thickness master), one release paper per laminate. Every book is stamped with its print mark before it goes into the press.</span></div>' :
+      '<div class="empty-state">Nothing to build for this press in this shift.</div>';
+  }
+
+  // ------------------------------------------------------------------ events
+  $('prev').addEventListener('click', function () { sh = step(sh, -1); draw(); });
+  $('next').addEventListener('click', function () { sh = step(sh, 1); draw(); });
+  $('now').addEventListener('click', function () { sh = shiftAt(X.ASOF); draw(); });
+  $('sum').addEventListener('click', function (e) { var tr = e.target.closest('tr[data-p]'); if (!tr || e.target.closest('a')) return; press = tr.getAttribute('data-p'); draw(); });
+  $('ptabs').addEventListener('click', function (e) { var b = e.target.closest('button[data-p]'); if (!b) return; press = b.getAttribute('data-p'); draw(); });
+  $('wo').addEventListener('click', function (e) { if (e.target.closest('a')) return; var h = e.target.closest('.ch'); if (h) h.parentNode.classList.toggle('closed'); });
+  $('xl').addEventListener('click', function () {
+    var cs = cyclesIn(sh), rows = [], w = win(sh);
+    cs.forEach(function (q) { var c = q.c; c.rows.forEach(function (rw, r) {
+      if (!rw.s) { rows.push([c.p, c.id, X.fmt(c.s0), c.band, r + 1, '', '', 'idle', '', '', 0, '']); return; }
+      if (rw.clean) { rows.push([c.p, c.id, X.fmt(c.s0), c.band, r + 1, rw.s, X.finishName(rw.f), 'cleaning pass', '', '', 0, X.printMark(c, r)]); return; }
+      rw.pl.forEach(function (x) { var ln = lineOf(x[0]); rows.push([c.p, c.id, X.fmt(c.s0), c.band, r + 1, rw.s, X.finishName(rw.f), ln.norm ? 'stock norm' : ln.id, ln.norm ? '' : X.custName(ln.cust), ln.skuId, x[1], X.printMark(c, r)]); });
+    }); });
+    var pick = [], all = need(cs, null);
+    Object.keys(all.dec).sort().forEach(function (d) { pick.push(['Decor paper', (X.by.papers[d] || {}).id || d, X.decor(d).name, all.dec[d]]); });
+    pick.push(['Overlay', 'MAT-OV25', 'Overlay paper 25 gsm', all.ov[25]], ['Overlay', 'MAT-OV45', 'Overlay paper 45 gsm', all.ov[45]], ['Kraft plies', 'MAT-KR135', 'Kraft 135 gsm', all.kr[135]], ['Kraft plies', 'MAT-KR190', 'Kraft 190 gsm', all.kr[190]], ['Release paper', 'MAT-REL', 'Release paper', all.rel]);
+    X.xlsx([{ name: 'Work order', cols: ['Press', 'Cycle', 'Press start', 'Cure band', 'Daylight', 'Mould set', 'Texture', 'Order line', 'Customer', 'SKU', 'Sheets', 'Print mark'], rows: rows, widths: [7, 10, 18, 9, 9, 11, 16, 16, 28, 24, 8, 34] },
+            { name: 'Pick list', cols: ['Kind', 'Material', 'Description', 'Quantity'], rows: pick, widths: [14, 12, 30, 10] }],
+      'Merino_WorkOrder_' + X.yymmdd(w[0]) + '_Shift' + sh[1] + '.xlsx');
+  });
+  X.withPlan(render);
+  X.whenPlanChanges(render);
+</script>
+</body>
+</html>

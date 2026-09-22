@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Merino Laminates — PPS</title>
+<link rel="icon" href="assets/img/merino-logo.png">
+<link rel="stylesheet" href="assets/vendor/roboto/roboto.css">
+<link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
+<link rel="stylesheet" href="assets/mer-shell.css">
+<style>
+  .host-col { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .ws-tabhost { height:35px; background:#e7ebee; border-bottom:1px solid var(--color-border); display:flex; align-items:stretch; flex-shrink:0; }
+  .ws-tabstrip { flex:1; display:flex; align-items:stretch; overflow-x:auto; } .ws-tabstrip::-webkit-scrollbar { height:4px; } .ws-tabstrip::-webkit-scrollbar-thumb { background:#b8c0c9; border-radius:2px; }
+  .ws-tab { display:flex; align-items:center; gap:7px; padding:0 10px 0 12px; font-size:12px; color:var(--color-text-secondary); background:#dfe4e7; border-right:1px solid var(--color-border); cursor:pointer; white-space:nowrap; flex:0 1 auto; min-width:0; max-width:210px; user-select:none; }
+  .ws-tab .lbl { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .ws-tab:hover { background:#eaeef0; } .ws-tab.active { background:#fff; color:var(--color-text-primary); font-weight:600; box-shadow:inset 0 -2px 0 var(--brand); }
+  .ws-tab .ws-ic { font-size:11px; opacity:.85; } .ws-tab .ws-close { width:16px; height:16px; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--color-text-hint); }
+  .ws-tab .ws-close:hover { background:rgba(0,0,0,.12); color:var(--color-danger); }
+  .ws-menu-btn { border:none; background:none; cursor:pointer; padding:0 12px; color:var(--color-text-muted); font-size:13px; } .ws-menu-btn:hover { color:var(--color-primary); }
+  .framestack { flex:1; position:relative; background:var(--color-bg); } .bm-frame { position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .ws-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--color-text-hint); gap:8px; } .ws-empty i { font-size:34px; opacity:.4; }
+  .ctxmenu { position:fixed; background:#fff; border:1px solid var(--color-border); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,.16); padding:4px; z-index:9999; min-width:180px; }
+  .ctxmenu div { padding:7px 12px; font-size:12px; border-radius:4px; cursor:pointer; display:flex; align-items:center; gap:8px; color:var(--color-text-secondary); } .ctxmenu div:hover { background:var(--color-primary-light); color:var(--color-primary-dark); } .ctxmenu div.disabled { opacity:.4; pointer-events:none; }
+</style>
+</head>
+<body>
+<header class="bm-header">
+  <div class="logo"><img src="assets/img/merino-logo.png" alt="Merino Laminates"><span class="t">PPS</span><span class="sub">Production Planning &amp; Scheduling</span></div>
+  <div class="module-name" id="modname"><i class="fa-solid fa-diagram-project"></i>Press · mould · daylight planning</div>
+  <div class="spacer"></div>
+  <div class="plant-switch"><button class="active"><i class="fa-solid fa-industry" style="margin-right:4px"></i>HPL Press Shop</button></div>
+  <div class="right"><span class="plan-mode" id="mer-mode"></span><span class="asof" id="mer-asof"></span><button class="btn-reset" id="reset" title="Clear every live-demo action (weights, what-ifs, master uploads) and reload"><i class="fa-solid fa-rotate-left"></i> Reset demo</button><div class="avatar">RP</div></div>
+</header>
+<div class="bm-layout">
+  <aside class="bm-sidebar" id="sidebar"></aside>
+  <div class="host-col">
+    <div class="ws-tabhost">
+      <div class="ws-tabstrip" id="tabstrip"></div>
+      <button class="ws-menu-btn" id="ws-menu" title="Tab actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+    </div>
+    <div class="framestack" id="stack"><div class="ws-empty" id="empty"><i class="fa-solid fa-window-restore"></i><div>Pick a module from the sidebar to open a tab</div></div></div>
+  </div>
+</div>
+<script src="assets/mer-nav.js"></script>
+<script src="data/mer-meta.js"></script>
+<!-- the host computes the plan once; every tab reads it (one basis, no per-tab recomputation) -->
+<script>window.MER_IS_HOST = true;</script>
+<script src="data/mer-data.js"></script>
+<script src="assets/mer-engine.js"></script>
+<script src="assets/mer-core.js"></script>
+<script>
+  var PAGES = window.MER_PAGES, KEY = 'mer-demo-state';
+  // sidebar from the shared nav
+  (function () {
+    var html = '';
+    window.MER_NAV.forEach(function (sec) { html += '<div class="nav-label">' + sec[0] + '</div>'; sec[1].forEach(function (it) { html += '<a data-page="' + it[0] + '"><i class="fa-solid ' + it[2] + '"></i>' + it[1] + '</a>'; }); });
+    html += '<div class="powered">Powered by<img src="assets/img/bluemingo-logo.png" alt="Bluemingo"></div>';
+    document.getElementById('sidebar').innerHTML = html;
+  })();
+  // header chip: the shared runtime renders plan mode + as-of from the live-demo state (same code as every page)
+  function headerState() { if (window.MERX) MERX.headerMode(); }
+  headerState(); window.addEventListener('storage', headerState);
+  var stack = document.getElementById('stack'), strip = document.getElementById('tabstrip'), empty = document.getElementById('empty');
+  var frames = {}, order = [], active = null;
+  function ensureFrame(id, hash) {
+    if (frames[id]) return frames[id];
+    var f = document.createElement('iframe'); f.className = 'bm-frame'; f.src = PAGES[id].href + (hash ? '#' + hash : ''); f.title = PAGES[id].label; f.style.display = 'none';
+    stack.appendChild(f); frames[id] = f; return f;
+  }
+  function open(id, hash) {
+    if (!PAGES[id]) return; if (order.indexOf(id) < 0) order.push(id);
+    var existed = !!frames[id]; ensureFrame(id, hash);
+    if (existed && hash) { try { frames[id].contentWindow.location.hash = hash; frames[id].contentWindow.dispatchEvent(new CustomEvent('mer:navigate', { detail: hash })); } catch (e) {} }
+    activate(id);
+  }
+  function activate(id) {
+    active = id; ensureFrame(id);
+    Object.keys(frames).forEach(function (k) { frames[k].style.display = (k === active ? 'block' : 'none'); });
+    try { frames[active].contentWindow.dispatchEvent(new Event('mer:activated')); } catch (e) {}
+    empty.style.display = order.length ? 'none' : 'flex'; document.title = PAGES[id].label + ' · Merino PPS';
+    document.getElementById('modname').innerHTML = '<i class="fa-solid ' + PAGES[id].icon + '"></i>' + PAGES[id].label; headerState(); render();
+  }
+  function closeTab(id) {
+    var i = order.indexOf(id); if (i < 0) return; if (frames[id]) { frames[id].remove(); delete frames[id]; } order.splice(i, 1);
+    if (active === id) { active = order.length ? order[Math.max(0, i - 1)] : null; if (active) activate(active); else { empty.style.display = 'flex'; render(); } } else render();
+  }
+  function closeOthers(id) { order.slice().forEach(function (x) { if (x !== id) closeTab(x); }); }
+  function closeAll() { order.slice().forEach(closeTab); }
+  function render() {
+    strip.innerHTML = order.map(function (id) { var p = PAGES[id]; return '<div class="ws-tab' + (id === active ? ' active' : '') + '" data-id="' + id + '" title="' + p.label + '"><i class="fa-solid ' + p.icon + ' ws-ic"></i><span class="lbl">' + p.label + '</span><span class="ws-close" data-close="' + id + '" title="Close"><i class="fa-solid fa-xmark"></i></span></div>'; }).join('');
+    var act = strip.querySelector('.ws-tab.active'); if (act && act.scrollIntoView) act.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    document.querySelectorAll('#sidebar a[data-page]').forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-page') === active); });
+  }
+  document.getElementById('sidebar').addEventListener('click', function (e) { var a = e.target.closest('a[data-page]'); if (a) { e.preventDefault(); open(a.getAttribute('data-page')); } });
+  strip.addEventListener('click', function (e) { var cl = e.target.closest('[data-close]'); if (cl) { closeTab(cl.getAttribute('data-close')); return; } var t = e.target.closest('.ws-tab'); if (t) activate(t.getAttribute('data-id')); });
+  strip.addEventListener('contextmenu', function (e) { var t = e.target.closest('.ws-tab'); if (!t) return; e.preventDefault(); menu(e.clientX, e.clientY, t.getAttribute('data-id')); });
+  document.getElementById('ws-menu').addEventListener('click', function () { var r = this.getBoundingClientRect(); menu(r.right - 190, r.bottom + 2, active); });
+  function closeMenu() { var m = document.querySelector('.ctxmenu'); if (m) m.remove(); }
+  function menu(x, y, id) {
+    closeMenu(); var others = order.filter(function (z) { return z !== id; }).length; var m = document.createElement('div'); m.className = 'ctxmenu';
+    var rows = [['Close tab', 'fa-xmark', id ? function () { closeTab(id); } : null], ['Close others', 'fa-diagram-next', (id && others) ? function () { closeOthers(id); } : null], ['Close all', 'fa-trash-can', order.length ? closeAll : null]];
+    m.innerHTML = rows.map(function (r, i) { return '<div class="' + (r[2] ? '' : 'disabled') + '" data-mi="' + i + '"><i class="fa-solid ' + r[1] + '"></i>' + r[0] + '</div>'; }).join('');
+    m.style.left = Math.max(6, Math.min(x, window.innerWidth - 196)) + 'px'; m.style.top = y + 'px'; document.body.appendChild(m);
+    m.addEventListener('click', function (e) { var d = e.target.closest('[data-mi]'); if (!d) return; var fn = rows[+d.getAttribute('data-mi')][2]; closeMenu(); if (fn) fn(); });
+    setTimeout(function () { document.addEventListener('mousedown', function od(e) { if (!m.contains(e.target)) { closeMenu(); document.removeEventListener('mousedown', od, true); } }, true); }, 0);
+  }
+  // Reset clears the live-demo state and reloads every open tab
+  document.getElementById('reset').addEventListener('click', function () { try { localStorage.removeItem(KEY); } catch (e) {} Object.keys(frames).forEach(function (k) { try { frames[k].contentWindow.location.reload(); } catch (e) {} }); headerState(); });
+  // a page that changes the plan (weights, what-ifs, masters) tells the host, which refreshes the header and every other open tab
+  window.MERHost = { open: open, planChanged: function (fromWin) { headerState(); Object.keys(frames).forEach(function (k) { try { if (frames[k].contentWindow !== fromWin) frames[k].contentWindow.dispatchEvent(new Event('mer:planchanged')); } catch (e) {} }); } };
+  open('home');
+</script>
+</body>
+</html>
