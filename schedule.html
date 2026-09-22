@@ -65,9 +65,9 @@
     document.getElementById('ctx').textContent = r.cycles.length - r.nHist + ' planned cycles from ' + X.fmt(X.ASOF);
     document.getElementById('kpis').innerHTML = [
       ['Planned cycles', X.n(k.cycles), 'next ' + X.D.meta.forwardDays + ' days, 6 presses', 'blue'],
-      ['Sheets planned', X.n(k.sheets), X.pct(k.fill, 0) + ' of plates filled', 'green'],
-      ['Press utilisation', X.pct(k.util, 0), 'running time over available time', 'blue'],
-      ['Changeover time', X.dur(k.chgMin), k.swaps + ' daylight swaps · ' + k.bandChanges + ' cure-band changes', 'amber'],
+      ['Sheets planned', X.n(k.sheets), X.pct(k.fill, 1) + ' of plates filled', 'green'],
+      ['Press utilisation', X.pct(k.util, 1), 'pressing time ÷ available (22 h a day)', 'blue'],
+      ['Changeover time', X.n(Math.round(k.chgMin / 60)) + ' h', X.n(k.swaps) + ' daylight swaps · ' + k.bandChanges + ' cure-band changes', 'amber'],
       ['Cleaning passes', X.n(k.cleaning), 'daylights resetting light-to-dark', 'grey'],
       ['OTIF (plan)', X.pct(k.otif, 1), k.onTime + ' of ' + k.dueIn + ' committed lines due in the horizon', k.otif >= 0.85 ? 'green' : 'amber']
     ].map(function (q) { return '<div class="kpi ' + q[3] + '"><div class="k">' + q[0] + '</div><div class="v">' + q[1] + '</div><div class="s">' + q[2] + '</div></div>'; }).join('');

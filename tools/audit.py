@@ -119,7 +119,11 @@ def main():
             open_page("schedule.html")
             t = pg.evaluate(TILES)
             check(num(t["planned cycles"]) == num(E["cycles"]), "schedule planned cycles", "%s vs %s" % (t["planned cycles"], E["cycles"]))
-            check(num(first(t["sheets to press"])) == num(E["sheets"]) if "sheets to press" in t else True, "schedule sheets")
+            check(t["sheets planned"] == E["sheets"], "schedule sheets", "%s vs %s" % (t["sheets planned"], E["sheets"]))
+            check(t["press utilisation"] == E["util"], "schedule utilisation", "%s vs %s" % (t["press utilisation"], E["util"]))
+            check(num(t["changeover time"]) == num(E["chgH"]), "schedule changeover hours", "%s vs %s h" % (t["changeover time"], E["chgH"]))
+            check(t["cleaning passes"] == E["cleaning"], "schedule cleaning passes")
+            check(t["otif (plan)"] == E["otif"], "schedule OTIF", "%s vs %s" % (t["otif (plan)"], E["otif"]))
 
             # ---------------- colour & changeover ----------------
             open_page("sequence.html")
