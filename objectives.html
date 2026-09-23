@@ -12,10 +12,10 @@
   .pr .t { font-weight:600; display:flex; gap:6px; align-items:center; } .pr .d { font-size:11.5px; color:var(--color-text-secondary); line-height:1.4; }
   .pr .w { font-size:10.5px; color:var(--color-text-hint); font-variant-numeric:tabular-nums; }
   table.cmp td.bar { min-width:112px; } table.cmp td, table.cmp th { padding-left:8px; padding-right:8px; } table.cmp .cb { display:flex; align-items:center; gap:6px; } table.cmp .cb i { display:block; height:8px; border-radius:4px; background:#86b6ef; }
-  table.cmp td.best .cb i { background:#1f6fb2; } table.cmp td.best .cb span { font-weight:700; }
+  table.cmp td.best .cb i { background:#1c5cab; } table.cmp td.best .cb span { font-weight:700; }
   table.cmp th.live { color:var(--color-primary-dark); } table.cmp .grp td { background:#fafbfc; font:600 10px 'Roboto'; text-transform:uppercase; letter-spacing:.3px; color:var(--color-text-muted); }
   .obj { display:grid; grid-template-columns:24px 1fr; gap:8px; align-items:start; margin-bottom:8px; font-size:12px; } .obj .nb { background:var(--color-primary-light); color:var(--color-primary-dark); border-radius:5px; text-align:center; font-weight:700; font-size:11px; padding:2px 0; }
-  svg.sc text { font:11px 'Roboto'; fill:#4a5563; } svg.sc .ax { stroke:#c9ced4; } svg.sc .gl { stroke:#eef0f2; }
+  svg.sc text { font:11px 'Roboto'; fill:#4a5563; } svg.sc .ax { stroke:#bdbdbd; } svg.sc .gl { stroke:#eef0f2; }
 </style>
 <script src="assets/mer-nav.js"></script><script src="assets/mer-embed.js"></script>
 </head>
@@ -51,7 +51,7 @@
   function drawPresets() {
     var live = X.settings().preset;
     document.getElementById('presets').innerHTML = P.map(function (w) {
-      return '<div class="pr' + (w.id === live ? ' live' : '') + '" data-p="' + w.id + '"><div class="t">' + (w.id === 'today' ? '<i class="fa-solid fa-list-ol" style="color:#8a93a0"></i>' : '<i class="fa-solid fa-sliders" style="color:#1f6fb2"></i>') + X.esc(w.label) + (w.id === live ? ' <span class="badge b-blue">live plan</span>' : '') + '</div><div class="d">' + X.esc(w.note) + '</div><div class="w">' + wtext(w) + '</div></div>'; }).join('');
+      return '<div class="pr' + (w.id === live ? ' live' : '') + '" data-p="' + w.id + '"><div class="t">' + (w.id === 'today' ? '<i class="fa-solid fa-list-ol" style="color:#8a93a0"></i>' : '<i class="fa-solid fa-sliders" style="color:var(--color-primary)"></i>') + X.esc(w.label) + (w.id === live ? ' <span class="badge b-blue">live plan</span>' : '') + '</div><div class="d">' + X.esc(w.note) + '</div><div class="w">' + wtext(w) + '</div></div>'; }).join('');
     var s = X.settings(); document.getElementById('liveinfo').innerHTML = 'Live plan: <b>' + X.esc(s.preset === 'custom' ? 'custom weights' : (P.filter(function (w) { return w.id === s.preset; })[0] || {}).label) + '</b>' + (s.whatifs.length ? ' · ' + s.whatifs.length + ' what-if(s) applied to every column' : '');
   }
   // run the presets one after another so the overlay can say which one is planning
@@ -109,7 +109,7 @@
       });
       if (!pick) pick = { x0: cx + 9, x1: cx + 9 + tw, y0: cy - 16, y1: cy - 3 };
       boxes.push(pick);
-      g += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (on ? 6 : 5) + '" fill="' + (on ? '#1f6fb2' : '#fff') + '" stroke="#1f6fb2" stroke-width="2"><title>' + X.esc(p.label + ': OTIF ' + p.y.toFixed(1) + '%, ' + X.n(p.x) + ' h') + '</title></circle>' +
+      g += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (on ? 6 : 5) + '" fill="' + (on ? '#2a78d6' : '#fff') + '" stroke="#2a78d6" stroke-width="2"><title>' + X.esc(p.label + ': OTIF ' + p.y.toFixed(1) + '%, ' + X.n(p.x) + ' h') + '</title></circle>' +
            '<text x="' + (pick.x0 + 2) + '" y="' + (pick.y1 - 3) + '">' + X.esc(p.label) + '</text>'; });
     document.getElementById('scatter').innerHTML = '<svg class="sc" width="100%" viewBox="0 0 ' + W + ' ' + (H + 16) + '">' + g + '<line class="ax" x1="' + L + '" x2="' + L + '" y1="10" y2="' + (H - B) + '"/><line class="ax" x1="' + L + '" x2="' + (W - 8) + '" y1="' + (H - B) + '" y2="' + (H - B) + '"/></svg>';
   }

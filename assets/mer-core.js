@@ -42,12 +42,13 @@
   // Categorical — order class (3 slots validate all-pairs; stock norms take the neutral), cure bands — ordinal one-hue ramp,
   // status — reserved steps, always shown with a label. Merino red is brand chrome only, never a data colour.
   var COLOR = {
-    cls: { EXPORT: '#2a78d6', DOM_COMMITTED: '#eb6834', DOM_OPEN: '#1baf7a', NORM: '#9aa2ad' },
+    cls: { EXPORT: '#2a78d6', DOM_COMMITTED: '#eb6834', DOM_OPEN: '#1baf7a', NORM: '#9e9e9e' },
     band: { B1: '#86b6ef', B2: '#5598e7', B3: '#2a78d6', B4: '#1c5cab', B5: '#104281' },
-    status: { good: '#0ca30c', warning: '#fab219', serious: '#ec835a', critical: '#d03b3b', neutral: '#b0b8c1', hist: '#c9ced4' },
-    accent: '#2a78d6', ink: '#1f2733'
+    // status steps are the design system's (success / warning / danger, with a deep-orange step between) — always with a label
+    status: { good: '#388e3c', warning: '#f57c00', serious: '#e65100', critical: '#d32f2f', neutral: '#9e9e9e', hist: '#bdbdbd' },
+    accent: '#2a78d6', primary: '#25A9E0', ink: '#333333'
   };
-  function textOn(hex) { var h = String(hex || '#999').replace('#', ''), r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16); return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 150 ? '#1f2733' : '#ffffff'; }
+  function textOn(hex) { var h = String(hex || '#999').replace('#', ''), r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16); return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 130 ? '#333333' : '#ffffff'; }
 
   // ---------------------------------------------------------------- live-demo state (per browser)
   var KEY = 'mer-demo-state';
@@ -90,8 +91,8 @@
     var o = document.getElementById('mer-busy');
     if (!on) { if (o) o.remove(); return; }
     if (!o) { o = document.createElement('div'); o.id = 'mer-busy'; o.style.cssText = 'position:fixed;inset:0;background:rgba(244,245,247,.72);z-index:9998;display:flex;align-items:center;justify-content:center'; document.body.appendChild(o); }
-    o.innerHTML = '<div style="background:#fff;border:1px solid #e0e3e7;border-radius:10px;padding:16px 22px;box-shadow:0 10px 30px rgba(0,0,0,.12);display:flex;gap:12px;align-items:center;font-size:13px">' +
-      '<i class="fa-solid fa-gear fa-spin" style="color:#1f6fb2;font-size:18px"></i><div><b>' + esc(msg || 'Planning') + '</b><div class="hint" style="font-size:11px;margin-top:2px">6 presses · ' + D.meta.forwardDays + ' days · mould, paper and cure-band rules</div></div></div>';
+    o.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px 22px;box-shadow:var(--shadow-lg);display:flex;gap:12px;align-items:center;font-size:13px">' +
+      '<i class="fa-solid fa-gear fa-spin" style="color:var(--color-primary);font-size:18px"></i><div><b>' + esc(msg || 'Planning') + '</b><div class="hint" style="font-size:11px;margin-top:2px">6 presses · ' + D.meta.forwardDays + ' days · mould, paper and cure-band rules</div></div></div>';
   }
   // Get the plan for the current settings and hand it to cb (at once if cached, else after the overlay has painted).
   function withPlan(cb, st, msg) {
@@ -153,7 +154,7 @@
   function headerMode() {
     var st = settings(), el = document.getElementById('mer-mode'), a = document.getElementById('mer-asof');
     var pr = (D.m.weights || []).filter(function (w) { return w.id === st.preset; })[0], label = st.preset === 'custom' ? 'Custom weights' : pr ? pr.label : st.preset;
-    if (el) el.innerHTML = '<i class="fa-solid fa-sliders" style="margin-right:4px;color:#f6a7a9"></i>Plan: <b>' + esc(label) + '</b>' + (st.whatifs.length ? ' · <b>' + st.whatifs.length + '</b> what-if' + (st.whatifs.length > 1 ? 's' : '') : '');
+    if (el) el.innerHTML = '<i class="fa-solid fa-sliders" style="margin-right:4px;color:var(--color-primary-light)"></i>Plan: <b>' + esc(label) + '</b>' + (st.whatifs.length ? ' · <b>' + st.whatifs.length + '</b> what-if' + (st.whatifs.length > 1 ? 's' : '') : '');
     if (a) a.innerHTML = '<i class="fa-regular fa-clock"></i> as of ' + fmt(ASOF) + ' · Shift ' + shiftOf(ASOF);
   }
 
@@ -174,7 +175,7 @@
       var mid = Math.max(s0, d * 1440) + (Math.min(e0, (d + 1) * 1440) - Math.max(s0, d * 1440)) / 2;
       head += '<div class="g-day" style="left:' + x(mid) + 'px">' + WD[dateOf(d * 1440).getDay()] + '<span class="dm">' + fmtDM(d * 1440) + '</span></div>';
     }
-    if (span <= 1440 * 1.01) for (var hh = Math.ceil(s0 / 240) * 240; hh < e0; hh += 240) head += '<div class="g-day" style="left:' + x(hh) + 'px;top:18px;font-weight:400;color:#9aa2ad">' + fmtT(hh) + '</div>';
+    if (span <= 1440 * 1.01) for (var hh = Math.ceil(s0 / 240) * 240; hh < e0; hh += 240) head += '<div class="g-day" style="left:' + x(hh) + 'px;top:18px;font-weight:400;color:#9e9e9e">' + fmtT(hh) + '</div>';
     var now = ASOF >= s0 && ASOF <= e0 ? '<div class="g-now" style="left:' + x(ASOF) + 'px"></div>' : '';
     var html = '<div class="g-row head"' + (span <= 1440 * 1.01 ? ' style="min-height:40px"' : '') + '><div class="g-lane head-lane" style="width:' + laneW + 'px">' + esc(opts.laneTitle || 'Press') + '</div><div class="g-track" style="min-width:' + W + 'px">' + grid + head + now + '</div></div>';
     var byLane = {}; bars.forEach(function (b) { (byLane[b.lane] = byLane[b.lane] || []).push(b); });

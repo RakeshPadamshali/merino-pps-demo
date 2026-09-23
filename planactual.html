@@ -33,7 +33,7 @@
     </div></div>
   </div>
   <div class="card"><div class="card-head"><i class="fa-solid fa-table-cells"></i> Output attainment by press and day — good sheets ÷ planned sheets <span class="right hint">click a cell for its disturbances</span></div><div class="card-body"><div class="tbl-wrap"><table class="tbl heat" id="heat"></table></div>
-    <div class="legend"><span><i class="sw" style="background:#0ca30c"></i>≥ 98%</span><span><i class="sw" style="background:#fab219"></i>90 – 98%</span><span><i class="sw" style="background:#ec835a"></i>75 – 90%</span><span><i class="sw" style="background:#d03b3b"></i>&lt; 75%</span><span><i class="fa-solid fa-bolt" style="color:#d03b3b;margin-right:4px"></i>breakdown</span><span><i class="fa-solid fa-clock" style="color:#b25f00;margin-right:4px"></i>cycle overruns</span><span><i class="fa-solid fa-circle-half-stroke" style="color:#5e35b1;margin-right:4px"></i>QC downgrade</span></div></div></div>
+    <div class="legend"><span><i class="sw" style="background:#388e3c"></i>≥ 98%</span><span><i class="sw" style="background:#f57c00"></i>90 – 98%</span><span><i class="sw" style="background:#e65100"></i>75 – 90%</span><span><i class="sw" style="background:#d32f2f"></i>&lt; 75%</span><span><i class="fa-solid fa-bolt" style="color:#d32f2f;margin-right:4px"></i>breakdown</span><span><i class="fa-solid fa-clock" style="color:#b25f00;margin-right:4px"></i>cycle overruns</span><span><i class="fa-solid fa-circle-half-stroke" style="color:#5e35b1;margin-right:4px"></i>QC downgrade</span></div></div></div>
   <div class="grid-2-1">
     <div class="card"><div class="card-head"><i class="fa-solid fa-list"></i> Disturbances <span class="right"><select id="f-ev" style="font:12px 'Roboto';padding:3px 6px;border:1px solid var(--color-border);border-radius:5px"><option value="">All</option><option value="bd">Breakdowns</option><option value="ov">Cycle overruns</option><option value="qc">QC downgrades</option></select></span></div><div class="card-body"><div class="filters" id="evfilter" style="margin-bottom:6px"></div><div class="tbl-wrap" id="ev-wrap"><table class="tbl" id="ev"></table></div></div></div>
     <div>
@@ -109,7 +109,7 @@
   function dayChart() {
     var ds = days(), good = perDay(function (x) { return x.good; }), qc = perDay(function (x) { return x.qc; }), ov = perDay(function (x) { return x.lostOv; }), bd = perDay(function (x) { return x.lostBd; });
     if (!chart) chart = echarts.init($('chart'));
-    var S = [['Good sheets', good, X.COLOR.accent], ['QC downgraded', qc, '#9aa2ad'], ['Lost to overruns', ov, ST.warning], ['Lost to breakdowns', bd, ST.critical]];
+    var S = [['Good sheets', good, X.COLOR.accent], ['QC downgraded', qc, '#9e9e9e'], ['Lost to overruns', ov, ST.warning], ['Lost to breakdowns', bd, ST.critical]];
     chart.setOption({
       animation: false, grid: { left: 52, right: 12, top: 30, bottom: 26 },
       legend: { top: 0, left: 0, itemWidth: 12, itemHeight: 10, textStyle: { fontSize: 11, color: '#546e7a' } },

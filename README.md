@@ -81,6 +81,27 @@ clears everything.
   in `localStorage`, the host-shared plan (the tab host computes once, every tab reads it), formatting, colours, the
   Gantt with its window pager, Excel export and the scenario definitions.
 
+## Look and feel
+
+The demo follows the **Bluemingo MES v2 design system** (`UI-Style-Guide-Prompt.md`, kept with the MES workspace — not
+copied into this public repo), the same one the other Bluemingo POCs use:
+
+| | |
+|---|---|
+| Primary | `#25A9E0`, hover `#1E8FBF`, light `#E1F5FE` — interactive elements only |
+| Chrome | header `#1a1a2e → #12121f`, sidebar `#1e1e32 → #16213e`, content `#f5f5f5`, cards white with a `#e0e0e0` border |
+| Status | success `#388e3c`, warning `#f57c00`, danger `#d32f2f`, info `#2196f3` — always a `rgba(colour, .12)` tint with solid text, never a solid fill |
+| Type | Roboto; tables 12 px with 10.5 px uppercase headers; 4 px spacing grid; radius 4 px inputs / 6 px panels |
+| Focus | 3 px primary glow `rgba(37,169,224,.15)` |
+
+`assets/mer-shell.css` holds those tokens; every page uses them, so a change there re-themes the whole demo. Merino's own
+red stays on the client logo — it is never used as a UI colour.
+
+**Data colours are a separate, validated set** (in `assets/mer-core.js`, `COLOR`): the categorical palette for order
+classes (`#2a78d6` / `#eb6834` / `#1baf7a` / `#9e9e9e`, checked for colour-blind separation), a single-hue ramp for cure
+bands, the design system's status steps for gauges and heat maps, and the TOC colour code (black / red / yellow / green /
+blue) for stock-norm buffers, where the band names *are* the colours.
+
 ## Verify
 
 ```bash
