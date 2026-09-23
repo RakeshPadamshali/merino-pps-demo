@@ -227,6 +227,23 @@
 
   // ---------------------------------------------------------------- scenarios (dashboard launcher; anchors in data.scenarios)
   var S = D.scenarios;
+  // S3 tells a story about taking a working mould set off. The generated anchor is the first choice, but the frozen history
+  // decides where every set actually is at the as-of — so if the anchor is already in refurbishment, take the busiest set of
+  // that texture that is available instead.
+  function s3Set() {
+    var anchor = S.S3.setId, r = cached(settings());
+    if (!r) return anchor;
+    var mm = r.m, hs = r.hist.state;
+    function free(id) { var st = hs.sets[id]; return mm.sets[id] && st && !(st.refurbUntil > ASOF); }
+    if (free(anchor)) return anchor;
+    var cyc = {};
+    r.cycles.forEach(function (c, i) { if (i < r.nHist) return; var seen = {}; c.rows.forEach(function (rw) { if (rw.s && !seen[rw.s]) { seen[rw.s] = 1; cyc[rw.s] = (cyc[rw.s] || 0) + 1; } }); });
+    var a = mm.sets[anchor], pool = a ? (mm.setsByKey[a.finishId + '|' + a.bed] || []).filter(function (x) { return !x.dedicatedTo && free(x.id); }) : [];
+    if (!pool.length) pool = mm.setList.filter(function (x) { return !x.dedicatedTo && free(x.id) && (mm.setsByKey[x.finishId + '|' + x.bed] || []).length > 1 && (cyc[x.id] || 0) > 0; });
+    pool.sort(function (x, y) { return (cyc[y.id] || 0) - (cyc[x.id] || 0) || (x.id < y.id ? -1 : 1); });
+    return pool.length ? pool[0].id : anchor;
+  }
+
   var SCENARIOS = [
     { id: 'S1', icon: 'fa-ship', page: 'orders.html', hash: 'impact', title: 'Rush export container', req: '3a · 6c',
       desc: 'A ' + n(S.S1.order.lines.reduce(function (a, l) { return a + l.qty; }, 0)) + '-sheet order from ' + custName(S.S1.order.customerId) + ' due in 6 days. The engine finds eligible presses and moulds and shows exactly which orders move.',
@@ -234,9 +251,9 @@
     { id: 'S2', icon: 'fa-sliders', page: 'objectives.html', title: 'Merino today vs weighted objectives', req: '3a · 3b · 4c · 6b',
       desc: 'The fixed sequence (export → committed domestic → norms) against the five objectives in one score — better delivery, far fewer mould changeovers, cleaning passes and stock-outs.',
       run: function () { } },
-    { id: 'S3', icon: 'fa-clone', page: 'moulds.html', hash: S.S3.setId, title: 'Mould set off early for refurbishment', req: '1b · 4a',
-      desc: 'Set ' + S.S3.setId + ' goes for refurbishment now (' + S.S3.hours + ' h). Its work moves to the twin set or another press; eligibility and the refurbishment calendar update.',
-      run: function () { addWhatif({ type: 'refurb', setId: S.S3.setId, hours: S.S3.hours }); } },
+    { id: 'S3', icon: 'fa-clone', page: 'moulds.html', hash: s3Set, title: 'Mould set off early for refurbishment', req: '1b · 4a',
+      desc: function () { return 'Set ' + s3Set() + ' goes for refurbishment now (' + S.S3.hours + ' h). Its work moves to the twin set or another press; eligibility and the refurbishment calendar update.'; },
+      run: function () { addWhatif({ type: 'refurb', setId: s3Set(), hours: S.S3.hours }); } },
     { id: 'S4', icon: 'fa-scroll', page: 'materials.html', hash: S.S4.decorId, title: 'China paper PO slips ' + S.S4.days + ' days', req: '5a',
       desc: 'PO ' + S.S4.poId + ' for decor ' + decor(S.S4.decorId).name + ' arrives ' + S.S4.days + ' days late. Lines of that design wait for paper; the press backfills with other work.',
       run: function () { addWhatif({ type: 'poDelay', poId: S.S4.poId, days: S.S4.days }); } },
@@ -258,7 +275,7 @@
     n: n, pct: pct, rs: rs, esc: esc, cls: cls, badge: badge, toast: toast, textOn: textOn,
     settings: settings, go: go, withPlan: withPlan, whenPlanChanges: whenPlanChanges, replan: replan, addWhatif: addWhatif, removeWhatif: removeWhatif, whatifLabel: whatifLabel,
     cachedPlan: cached, computePlan: compute, busy: busy, headerMode: headerMode, hashParam: function () { return decodeURIComponent((location.hash || '').slice(1)); },
-    sku: sku, decor: decor, finishName: finishName, custName: custName, sizeLabel: sizeLabel, skuText: skuText, swatch: swatch, printMark: printMark,
+    sku: sku, decor: decor, finishName: finishName, custName: custName, sizeLabel: sizeLabel, skuText: skuText, swatch: swatch, printMark: printMark, s3Set: s3Set,
     gantt: gantt, pager: pager, xlsx: xlsx,
     // host-side API (the tab host computes once; tabs read)
     _cached: function (st) { var ov = mastersOverlay(); return C.plans[planKey(st, JSON.stringify(ov))] || null; },

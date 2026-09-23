@@ -148,7 +148,7 @@
     var st = X.settings(), wis = st.whatifs.filter(function (w) { return w.type === 'refurb'; });
     $('wibar').innerHTML = wis.length ? '<div class="wibar"><i class="fa-solid fa-flask"></i><span>' + wis.map(function (w) { return '<b>' + X.esc(X.whatifLabel(w)) + '</b>'; }).join(' · ') + ' — the plan on every page already runs without ' + (wis.length > 1 ? 'these sets' : 'this set') + '.</span>' +
       wis.map(function (w) { return '<button class="btn btn-outline btn-sm" data-rmw="' + X.esc(w.id) + '"><i class="fa-solid fa-xmark"></i> Remove ' + X.esc(w.setId) + '</button>'; }).join('') + '</div>' : '';
-    if (!selSet || !m.sets[selSet]) { var h = X.hashParam(); selSet = m.sets[h] ? h : wis.length ? wis[wis.length - 1].setId : X.D.scenarios.S3.setId; }
+    if (!selSet || !m.sets[selSet]) { var h = X.hashParam(); selSet = m.sets[h] ? h : wis.length ? wis[wis.length - 1].setId : X.s3Set(); }
     detail(); board(); calendar(); health(); alerts(); coverage();
   }
 
@@ -206,8 +206,8 @@
   function impact(s, wiOn) {
     var el = $('dimp');
     if (!wiOn) {
-      var S3 = X.D.scenarios.S3;
-      el.innerHTML = '<div class="note" style="margin-top:0"><i class="fa-solid fa-circle-info"></i><span>' + (s.id === S3.setId ? '<b>Scenario S3.</b> Inspection finds a scratched plate on <b>' + X.esc(s.id) + '</b>. Send it for refurbishment now and the plan re-runs without it: its work moves to the twin sets or to another bed size, class-A work waits for a set with enough health, and the refurbishment calendar and every page update.' :
+      var S3 = X.D.scenarios.S3, s3id = X.s3Set();
+      el.innerHTML = '<div class="note" style="margin-top:0"><i class="fa-solid fa-circle-info"></i><span>' + (s.id === s3id ? '<b>Scenario S3.</b> Inspection finds a scratched plate on <b>' + X.esc(s.id) + '</b>. Send it for refurbishment now and the plan re-runs without it: its work moves to the twin sets or to another bed size, class-A work waits for a set with enough health, and the refurbishment calendar and every page update.' :
         'Send any set for refurbishment now to see what moves: the plan re-runs without it for ' + (m.refurbMin / 60) + ' h — its work goes to the twin sets, another bed size or later, and every page follows.') + '</span></div>';
       return;
     }

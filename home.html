@@ -85,7 +85,7 @@
   function active(sc) {
     var S = X.D.scenarios, w = X.settings().whatifs;
     if (sc.id === 'S1') return w.filter(function (x) { return x.type === 'rush'; });
-    if (sc.id === 'S3') return w.filter(function (x) { return x.type === 'refurb' && x.setId === S.S3.setId; });
+    if (sc.id === 'S3') return w.filter(function (x) { return x.type === 'refurb' && x.setId === X.s3Set(); });
     if (sc.id === 'S4') return w.filter(function (x) { return x.type === 'poDelay' && x.poId === S.S4.poId; });
     if (sc.id === 'S5') return w.filter(function (x) { return (x.type === 'cancel' && x.orderId === S.S5.cancelOrderId) || (x.type === 'downgrade' && x.lineId === S.S5.downgradeLineId); });
     if (sc.id === 'S7') { var ov = X.State.get('masters', {}); return ((ov.skus || {}).rows || []).some(function (r) { return S.S7.sku && r.id === S.S7.sku.id; }) ? [{ masters: true }] : []; }
@@ -96,7 +96,7 @@
     $('scen').innerHTML = X.SCENARIOS.map(function (sc) {
       var on = active(sc).length, nav = NAV_ONLY[sc.id];
       return '<div class="sc' + (on ? ' on' : '') + '"><div class="st"><span class="n">' + sc.id + '</span><i class="fa-solid ' + sc.icon + '" style="color:var(--color-text-muted)"></i>' + X.esc(sc.title) + '</div>' +
-        '<div class="sd">' + X.esc(sc.desc) + '</div><div class="req">Requirements ' + X.esc(sc.req) + '</div><div class="sf">' +
+        '<div class="sd">' + X.esc(typeof sc.desc === 'function' ? sc.desc() : sc.desc) + '</div><div class="req">Requirements ' + X.esc(sc.req) + '</div><div class="sf">' +
         (on ? '<button class="btn btn-primary btn-sm" data-open="' + sc.id + '"><i class="fa-solid fa-arrow-right"></i> See the result</button>' + (sc.id !== 'S7' ? '<button class="btn btn-outline btn-sm" data-undo="' + sc.id + '"><i class="fa-solid fa-rotate-left"></i> Undo</button>' : '') :
           '<button class="btn ' + (nav ? 'btn-outline' : 'btn-brand') + ' btn-sm" data-run="' + sc.id + '"><i class="fa-solid ' + (nav ? 'fa-arrow-right' : 'fa-play') + '"></i> ' + (nav || 'Run on the live plan') + '</button>') +
         '</div></div>';
@@ -105,9 +105,10 @@
   $('scen').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
     var id = b.getAttribute('data-run') || b.getAttribute('data-open') || b.getAttribute('data-undo'), sc = X.SCENARIOS.filter(function (x) { return x.id === id; })[0]; if (!sc) return;
-    if (b.getAttribute('data-open') || (b.getAttribute('data-run') && NAV_ONLY[id])) { X.go(sc.page.replace('.html', ''), sc.hash); return; }
+    var hash = typeof sc.hash === 'function' ? sc.hash() : sc.hash;
+    if (b.getAttribute('data-open') || (b.getAttribute('data-run') && NAV_ONLY[id])) { X.go(sc.page.replace('.html', ''), hash); return; }
     if (b.getAttribute('data-undo')) { var ids = active(sc).map(function (w) { return w.id; }); X.replan(function () { ids.forEach(X.removeWhatif); }, 'Undoing scenario ' + id, render); return; }
-    X.replan(function () { sc.run(); }, 'Running scenario ' + id + ' on the live plan', function (r) { render(r); X.go(sc.page.replace('.html', ''), sc.hash); });
+    X.replan(function () { sc.run(); }, 'Running scenario ' + id + ' on the live plan', function (r) { render(r); X.go(sc.page.replace('.html', ''), typeof sc.hash === 'function' ? sc.hash() : sc.hash); });
   });
 
   // ------------------------------------------------------------------ press status board

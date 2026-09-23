@@ -114,7 +114,7 @@ def main():
             page = run(pg, "S3")
             check(page == "moulds.html", "S3 opens the Mould Board", page)
             st = state(pg)
-            sid = pg.evaluate("MERX.D.scenarios.S3.setId")
+            sid = pg.evaluate("MERX.s3Set()")
             check(any(w["type"] == "refurb" and w["setId"] == sid for w in st.get("whatifs", [])), "S3 takes %s off for refurbishment" % sid)
             pg.wait_for_selector("#dimp table", timeout=60000)
             imp = pg.inner_text("#dimp").lower()
